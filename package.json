@@ -17,7 +17,7 @@
     "build": "rm -rf dist && pnpm run build:dist && pnpm run build:ts-declaration",
     "build:dist": "webpack --config webpack.config.ts",
     "build:ts-declaration": "tsc && api-extractor run --local --verbose",
-    "lint": "eslint --ext js,jsx,ts,tsx src",
+    "lint": "eslint --ext js,jsx,ts,tsx ./src",
     "test": "jest"
   },
   "devDependencies": {
