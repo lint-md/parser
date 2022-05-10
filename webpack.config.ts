@@ -8,7 +8,7 @@ const config = () => {
     entry: './src/index.ts',
     output: {
       // 打包成 commonjs 模块，放入 lib 目录下
-      path: path.resolve(process.cwd(), 'lib'),
+      path: path.resolve(process.cwd(), 'dist'),
       filename: 'lint-md-parser.js',
       library: {
         type: 'commonjs',
