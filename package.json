@@ -1,0 +1,40 @@
+{
+  "name": "@lint-md/parser",
+  "version": "0.0.0",
+  "description": "> TODO: add description",
+  "author": "> TODO: add author",
+  "homepage": "",
+  "license": "MIT",
+  "main": "./lib/lint-md-parser.js",
+  "typings": "./lib/lint-md-parser.d.ts",
+  "files": [
+    "src",
+    "esm",
+    "lib"
+  ],
+  "scripts": {
+    "watch": "tsc -w",
+    "build": "rm -rf lib && pnpm run build:dist && pnpm run build:ts-declaration",
+    "build:dist": "webpack --config ./config/webpack.config.ts",
+    "build:ts-declaration": "tsc && api-extractor run --local --verbose",
+    "lint": "eslint --ext js,jsx,ts,tsx src",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@attachments/eslint-plugin": "^0.1.0",
+    "@microsoft/api-extractor": "^7.23.2",
+    "@types/jest": "^26.0.24",
+    "@types/node": "^16.4.6",
+    "concurrently": "^7.1.0",
+    "eslint": "^7.31.0",
+    "jest": "^27.0.6",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^2.4.1",
+    "rimraf": "^3.0.2",
+    "terser-webpack-plugin": "^5.3.1",
+    "ts-jest": "^27.0.4",
+    "ts-node": "^10.1.0",
+    "typescript": "^4.3.5",
+    "webpack": "^5.72.0"
+  }
+}
