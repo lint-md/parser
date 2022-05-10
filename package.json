@@ -2,15 +2,18 @@
   "name": "@lint-md/parser",
   "version": "0.0.1",
   "description": "> TODO: add description",
-  "author": "> TODO: add author",
-  "homepage": "",
+  "author": "yuzhanglong <loveyzl1123@gmail.com>",
+  "contributors": [
+    "hustcc <i@hust.cc>",
+    "yuzhanglong <loveyzl1123@gmail.com>"
+  ],
+  "homepage": "https://github.com/lint-md",
   "license": "MIT",
-  "main": "./lib/lint-md-parser.js",
-  "typings": "./lib/lint-md-parser.d.ts",
+  "main": "./dist/lint-md-parser.js",
+  "typings": "./dist/lint-md-parser.d.ts",
   "files": [
     "src",
-    "esm",
-    "lib"
+    "dist"
   ],
   "scripts": {
     "watch": "tsc -w",
