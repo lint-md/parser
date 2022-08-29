@@ -1,5 +1,3 @@
-import { Parent } from 'unist';
+import { Root } from 'remark-frontmatter';
 
-export type MarkdownNode = Omit<Parent, 'children'> & {
-  children?: MarkdownNode[];
-};
+export type MarkdownNode = Root;
