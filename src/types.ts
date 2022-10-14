@@ -1,3 +1,3 @@
-import { Node } from 'unist';
+import { Parent } from 'unist';
 
-export type MarkdownNode = Node;
+export type MarkdownNode = Parent;
