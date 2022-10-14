@@ -1,6 +1,6 @@
 {
   "name": "@lint-md/parser",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "lint-md 的解析器，基于 remark 生态，将 Markdown 字符串转换成 AST",
   "author": "yuzhanglong <loveyzl1123@gmail.com>",
   "contributors": [
@@ -28,7 +28,6 @@
     "@microsoft/api-extractor": "^7.23.2",
     "@types/jest": "^26.0.24",
     "@types/node": "^16.4.6",
-    "@types/unist": "^2.0.6",
     "concurrently": "^7.1.0",
     "eslint": "^7.31.0",
     "jest": "^27.0.6",
@@ -44,6 +43,7 @@
     "webpack-cli": "^4.9.2"
   },
   "dependencies": {
+    "@types/unist": "^2.0.6",
     "remark-frontmatter": "^4.0.1",
     "remark-gfm": "^3.0.1",
     "remark-parse": "^10.0.1",
