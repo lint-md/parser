@@ -1,3 +1,3 @@
-import { Root } from 'remark-frontmatter';
+import { Node } from 'unist';
 
-export type MarkdownNode = Root;
+export type MarkdownNode = Node;
