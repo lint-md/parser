@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const { parseMd } = require('../dist/lint-md-parser');
+const { parseMd, revertMdAstNode } = require('../dist/lint-md-parser');
 
 describe('test lint-md-parser', () => {
   const mdDemo = fs
@@ -14,5 +14,11 @@ describe('test lint-md-parser', () => {
 
   test('invoke parseMd', () => {
     expect(parseMd(mdDemo)).toMatchSnapshot();
+  });
+
+  test('invoke revertMdAstNode', () => {
+    const ast = parseMd(mdDemo);
+    const res = revertMdAstNode(ast);
+    expect(res).toMatchSnapshot();
   });
 });

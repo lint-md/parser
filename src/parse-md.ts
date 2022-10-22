@@ -1,14 +1,12 @@
-import { unified } from 'unified';
-import remarkParse from 'remark-parse';
 import frontmatter from 'remark-frontmatter';
 import remarkMdx from 'remark-mdx';
 import remarkGfm from 'remark-gfm';
 import remarkDirective from 'remark-directive';
 import remarkMath from 'remark-math';
 import { MarkdownNode } from './types';
+import { remark } from 'remark';
 
-const depsLink = unified()
-  .use(remarkParse)
+const depsLink = remark()
   .use(frontmatter)
   .use(remarkMdx)
   .use(remarkGfm)
@@ -33,6 +31,6 @@ export const parseMd = (md: string): MarkdownNode => {
  * @returns {string} md Markdown 文本
  * @author YuZhanglong <loveyzl1123@gmail.com>
  */
-export const revertMdAstNode = (node: MarkdownNode) => {
+export const revertMdAstNode = (node: MarkdownNode): string => {
   return depsLink.stringify(node);
 };
