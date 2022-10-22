@@ -1,6 +1,6 @@
 import { Parent } from 'unist';
 
-export type MarkdownNode = Parent;
+export type MarkdownNode = Parent & any;
 
 /** Markdown 节点位置 */
 export interface MarkdownNodePosition {
