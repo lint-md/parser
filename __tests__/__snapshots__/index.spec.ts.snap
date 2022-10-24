@@ -431,9 +431,9 @@ tags:
   ],
   "position": Object {
     "end": Object {
-      "column": 25,
-      "line": 18,
-      "offset": 197,
+      "column": 1,
+      "line": 19,
+      "offset": 198,
     },
     "start": Object {
       "column": 1,
@@ -459,7 +459,7 @@ tags:
 
 你好 世界
 
-[www.example.com](http://www.example.com), [https://example.com](https://example.com), and [contact@example.com](mailto\\\\:contact@example.com).
+[www.example.com](http://www.example.com), <https://example.com>, and <contact@example.com>.
 
 [^1]: Big note.
 
