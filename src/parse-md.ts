@@ -1,5 +1,4 @@
 import frontmatter from 'remark-frontmatter';
-import remarkMdx from 'remark-mdx';
 import remarkGfm from 'remark-gfm';
 import remarkDirective from 'remark-directive';
 import remarkMath from 'remark-math';
@@ -8,7 +7,6 @@ import { remark } from 'remark';
 
 const depsLink = remark()
   .use(frontmatter)
-  .use(remarkMdx)
   .use(remarkGfm)
   .use(remarkDirective)
   .use(remarkMath);

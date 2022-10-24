@@ -48,7 +48,6 @@
     "remark-directive": "^2.0.1",
     "remark-frontmatter": "^4.0.1",
     "remark-gfm": "^3.0.1",
-    "remark-math": "^5.1.1",
-    "remark-mdx": "^2.1.5"
+    "remark-math": "^5.1.1"
   }
 }
