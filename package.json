@@ -1,6 +1,6 @@
 {
   "name": "@lint-md/parser",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "lint-md 的解析器，基于 remark 生态，将 Markdown 字符串转换成 AST",
   "author": "yuzhanglong <loveyzl1123@gmail.com>",
   "contributors": [
