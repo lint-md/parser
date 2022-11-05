@@ -428,12 +428,45 @@ tags:
       },
       "type": "paragraph",
     },
+    Object {
+      "children": Array [
+        Object {
+          "position": Object {
+            "end": Object {
+              "column": 78,
+              "line": 20,
+              "offset": 276,
+            },
+            "start": Object {
+              "column": 1,
+              "line": 20,
+              "offset": 199,
+            },
+          },
+          "type": "text",
+          "value": "假设你打开了浏览器，并且搜索了 \\"www.google.com\\"。 在这个场景内，你的浏览器就是客户端，更宽泛地讲，你可以把你正在使用的计算机当作客户端。",
+        },
+      ],
+      "position": Object {
+        "end": Object {
+          "column": 78,
+          "line": 20,
+          "offset": 276,
+        },
+        "start": Object {
+          "column": 1,
+          "line": 20,
+          "offset": 199,
+        },
+      },
+      "type": "paragraph",
+    },
   ],
   "position": Object {
     "end": Object {
       "column": 1,
-      "line": 19,
-      "offset": 198,
+      "line": 21,
+      "offset": 277,
     },
     "start": Object {
       "column": 1,

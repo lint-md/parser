@@ -1,4 +1,4 @@
-import { Parent } from 'unist';
+import type { Parent } from 'unist';
 
 export type MarkdownNode = Parent & any;
 
@@ -7,27 +7,27 @@ export interface MarkdownNodePosition {
   /**
    * 所在行（索引从 1 开始）
    */
-  line: number;
+  line: number
 
   /**
    * 所在列（索引从 1 开始）
    */
-  column: number;
+  column: number
 }
 
 export type MarkdownCodeNode = MarkdownNode & {
-  value: string;
-  lang: string;
+  value: string
+  lang: string
 };
 
 export type MarkdownListItemNode = MarkdownNode & {
-  children: MarkdownNode[];
+  children: MarkdownNode[]
 };
 
 export type MarkdownLinkNode = MarkdownNode & {
-  url: string;
+  url: string
 };
 
 export type MarkdownTextNode = MarkdownNode & {
-  value: string;
+  value: string
 };

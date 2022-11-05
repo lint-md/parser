@@ -2,8 +2,12 @@ import frontmatter from 'remark-frontmatter';
 import remarkGfm from 'remark-gfm';
 import remarkDirective from 'remark-directive';
 import remarkMath from 'remark-math';
-import { MarkdownNode } from './types';
 import { remark } from 'remark';
+import { gfmAutolinkLiteralFromMarkdown } from 'mdast-util-gfm-autolink-literal';
+import type { MarkdownNode } from './types';
+
+// https://github.com/remarkjs/remark-gfm/issues/16，解决某些 text 节点没有 position 的问题
+gfmAutolinkLiteralFromMarkdown.transforms = [];
 
 const depsLink = remark()
   .use(frontmatter)
