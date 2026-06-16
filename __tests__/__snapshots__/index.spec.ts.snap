@@ -94,11 +94,29 @@ tags:
     {
       "children": [
         {
+          "children": [
+            {
+              "position": {
+                "end": {
+                  "column": 16,
+                  "line": 14,
+                  "offset": 107,
+                },
+                "start": {
+                  "column": 1,
+                  "line": 14,
+                  "offset": 92,
+                },
+              },
+              "type": "text",
+              "value": "www.example.com",
+            },
+          ],
           "position": {
             "end": {
-              "column": 63,
+              "column": 16,
               "line": 14,
-              "offset": 154,
+              "offset": 107,
             },
             "start": {
               "column": 1,
@@ -106,8 +124,127 @@ tags:
               "offset": 92,
             },
           },
+          "title": null,
+          "type": "link",
+          "url": "http://www.example.com",
+        },
+        {
+          "position": {
+            "end": {
+              "column": 18,
+              "line": 14,
+              "offset": 109,
+            },
+            "start": {
+              "column": 16,
+              "line": 14,
+              "offset": 107,
+            },
+          },
           "type": "text",
-          "value": "www.example.com, https://example.com, and contact@example.com.",
+          "value": ", ",
+        },
+        {
+          "children": [
+            {
+              "position": {
+                "end": {
+                  "column": 37,
+                  "line": 14,
+                  "offset": 128,
+                },
+                "start": {
+                  "column": 18,
+                  "line": 14,
+                  "offset": 109,
+                },
+              },
+              "type": "text",
+              "value": "https://example.com",
+            },
+          ],
+          "position": {
+            "end": {
+              "column": 37,
+              "line": 14,
+              "offset": 128,
+            },
+            "start": {
+              "column": 18,
+              "line": 14,
+              "offset": 109,
+            },
+          },
+          "title": null,
+          "type": "link",
+          "url": "https://example.com",
+        },
+        {
+          "position": {
+            "end": {
+              "column": 43,
+              "line": 14,
+              "offset": 134,
+            },
+            "start": {
+              "column": 37,
+              "line": 14,
+              "offset": 128,
+            },
+          },
+          "type": "text",
+          "value": ", and ",
+        },
+        {
+          "children": [
+            {
+              "position": {
+                "end": {
+                  "column": 62,
+                  "line": 14,
+                  "offset": 153,
+                },
+                "start": {
+                  "column": 43,
+                  "line": 14,
+                  "offset": 134,
+                },
+              },
+              "type": "text",
+              "value": "contact@example.com",
+            },
+          ],
+          "position": {
+            "end": {
+              "column": 62,
+              "line": 14,
+              "offset": 153,
+            },
+            "start": {
+              "column": 43,
+              "line": 14,
+              "offset": 134,
+            },
+          },
+          "title": null,
+          "type": "link",
+          "url": "mailto:contact@example.com",
+        },
+        {
+          "position": {
+            "end": {
+              "column": 63,
+              "line": 14,
+              "offset": 154,
+            },
+            "start": {
+              "column": 62,
+              "line": 14,
+              "offset": 153,
+            },
+          },
+          "type": "text",
+          "value": ".",
         },
       ],
       "position": {
@@ -355,12 +492,12 @@ tags:
 
 你好 世界
 
-www.example.com, https://example.com, and contact@example.com.
+[www.example.com](http://www.example.com), <https://example.com>, and <contact@example.com>.
 
 [^1]: Big note.
 
 ~~one~~ or ~~two~~ tildes.
 
-假设你打开了浏览器，并且搜索了 "www.google.com"。 在这个场景内，你的浏览器就是客户端，更宽泛地讲，你可以把你正在使用的计算机当作客户端。
+假设你打开了浏览器，并且搜索了 "www\\.google.com"。 在这个场景内，你的浏览器就是客户端，更宽泛地讲，你可以把你正在使用的计算机当作客户端。
 "
 `;
