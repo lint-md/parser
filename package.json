@@ -9,6 +9,7 @@
   ],
   "homepage": "https://github.com/lint-md",
   "license": "MIT",
+  "packageManager": "pnpm@11.0.9",
   "main": "./dist/lint-md-parser.js",
   "typings": "./dist/lint-md-parser.d.ts",
   "files": [
