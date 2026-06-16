@@ -1,16 +1,16 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`test lint-md-parser invoke parseMd 1`] = `
-{
-  "children": [
-    {
-      "position": {
-        "end": {
+Object {
+  "children": Array [
+    Object {
+      "position": Object {
+        "end": Object {
           "column": 4,
           "line": 8,
           "offset": 68,
         },
-        "start": {
+        "start": Object {
           "column": 1,
           "line": 1,
           "offset": 0,
@@ -24,16 +24,16 @@ tags:
   - IDEA
   - Spring Boot",
     },
-    {
-      "children": [
-        {
-          "position": {
-            "end": {
+    Object {
+      "children": Array [
+        Object {
+          "position": Object {
+            "end": Object {
               "column": 14,
               "line": 10,
               "offset": 83,
             },
-            "start": {
+            "start": Object {
               "column": 3,
               "line": 10,
               "offset": 72,
@@ -44,13 +44,13 @@ tags:
         },
       ],
       "depth": 1,
-      "position": {
-        "end": {
+      "position": Object {
+        "end": Object {
           "column": 14,
           "line": 10,
           "offset": 83,
         },
-        "start": {
+        "start": Object {
           "column": 1,
           "line": 10,
           "offset": 70,
@@ -58,16 +58,16 @@ tags:
       },
       "type": "heading",
     },
-    {
-      "children": [
-        {
-          "position": {
-            "end": {
+    Object {
+      "children": Array [
+        Object {
+          "position": Object {
+            "end": Object {
               "column": 6,
               "line": 12,
               "offset": 90,
             },
-            "start": {
+            "start": Object {
               "column": 1,
               "line": 12,
               "offset": 85,
@@ -77,13 +77,13 @@ tags:
           "value": "你好 世界",
         },
       ],
-      "position": {
-        "end": {
+      "position": Object {
+        "end": Object {
           "column": 6,
           "line": 12,
           "offset": 90,
         },
-        "start": {
+        "start": Object {
           "column": 1,
           "line": 12,
           "offset": 85,
@@ -91,18 +91,18 @@ tags:
       },
       "type": "paragraph",
     },
-    {
-      "children": [
-        {
-          "children": [
-            {
-              "position": {
-                "end": {
+    Object {
+      "children": Array [
+        Object {
+          "children": Array [
+            Object {
+              "position": Object {
+                "end": Object {
                   "column": 16,
                   "line": 14,
                   "offset": 107,
                 },
-                "start": {
+                "start": Object {
                   "column": 1,
                   "line": 14,
                   "offset": 92,
@@ -112,13 +112,13 @@ tags:
               "value": "www.example.com",
             },
           ],
-          "position": {
-            "end": {
+          "position": Object {
+            "end": Object {
               "column": 16,
               "line": 14,
               "offset": 107,
             },
-            "start": {
+            "start": Object {
               "column": 1,
               "line": 14,
               "offset": 92,
@@ -128,14 +128,14 @@ tags:
           "type": "link",
           "url": "http://www.example.com",
         },
-        {
-          "position": {
-            "end": {
+        Object {
+          "position": Object {
+            "end": Object {
               "column": 18,
               "line": 14,
               "offset": 109,
             },
-            "start": {
+            "start": Object {
               "column": 16,
               "line": 14,
               "offset": 107,
@@ -144,16 +144,16 @@ tags:
           "type": "text",
           "value": ", ",
         },
-        {
-          "children": [
-            {
-              "position": {
-                "end": {
+        Object {
+          "children": Array [
+            Object {
+              "position": Object {
+                "end": Object {
                   "column": 37,
                   "line": 14,
                   "offset": 128,
                 },
-                "start": {
+                "start": Object {
                   "column": 18,
                   "line": 14,
                   "offset": 109,
@@ -163,13 +163,13 @@ tags:
               "value": "https://example.com",
             },
           ],
-          "position": {
-            "end": {
+          "position": Object {
+            "end": Object {
               "column": 37,
               "line": 14,
               "offset": 128,
             },
-            "start": {
+            "start": Object {
               "column": 18,
               "line": 14,
               "offset": 109,
@@ -179,14 +179,14 @@ tags:
           "type": "link",
           "url": "https://example.com",
         },
-        {
-          "position": {
-            "end": {
+        Object {
+          "position": Object {
+            "end": Object {
               "column": 43,
               "line": 14,
               "offset": 134,
             },
-            "start": {
+            "start": Object {
               "column": 37,
               "line": 14,
               "offset": 128,
@@ -195,16 +195,16 @@ tags:
           "type": "text",
           "value": ", and ",
         },
-        {
-          "children": [
-            {
-              "position": {
-                "end": {
+        Object {
+          "children": Array [
+            Object {
+              "position": Object {
+                "end": Object {
                   "column": 62,
                   "line": 14,
                   "offset": 153,
                 },
-                "start": {
+                "start": Object {
                   "column": 43,
                   "line": 14,
                   "offset": 134,
@@ -214,13 +214,13 @@ tags:
               "value": "contact@example.com",
             },
           ],
-          "position": {
-            "end": {
+          "position": Object {
+            "end": Object {
               "column": 62,
               "line": 14,
               "offset": 153,
             },
-            "start": {
+            "start": Object {
               "column": 43,
               "line": 14,
               "offset": 134,
@@ -230,14 +230,14 @@ tags:
           "type": "link",
           "url": "mailto:contact@example.com",
         },
-        {
-          "position": {
-            "end": {
+        Object {
+          "position": Object {
+            "end": Object {
               "column": 63,
               "line": 14,
               "offset": 154,
             },
-            "start": {
+            "start": Object {
               "column": 62,
               "line": 14,
               "offset": 153,
@@ -247,13 +247,13 @@ tags:
           "value": ".",
         },
       ],
-      "position": {
-        "end": {
+      "position": Object {
+        "end": Object {
           "column": 63,
           "line": 14,
           "offset": 154,
         },
-        "start": {
+        "start": Object {
           "column": 1,
           "line": 14,
           "offset": 92,
@@ -261,18 +261,18 @@ tags:
       },
       "type": "paragraph",
     },
-    {
-      "children": [
-        {
-          "children": [
-            {
-              "position": {
-                "end": {
+    Object {
+      "children": Array [
+        Object {
+          "children": Array [
+            Object {
+              "position": Object {
+                "end": Object {
                   "column": 16,
                   "line": 16,
                   "offset": 171,
                 },
-                "start": {
+                "start": Object {
                   "column": 7,
                   "line": 16,
                   "offset": 162,
@@ -282,13 +282,13 @@ tags:
               "value": "Big note.",
             },
           ],
-          "position": {
-            "end": {
+          "position": Object {
+            "end": Object {
               "column": 16,
               "line": 16,
               "offset": 171,
             },
-            "start": {
+            "start": Object {
               "column": 7,
               "line": 16,
               "offset": 162,
@@ -299,13 +299,13 @@ tags:
       ],
       "identifier": "1",
       "label": "1",
-      "position": {
-        "end": {
+      "position": Object {
+        "end": Object {
           "column": 16,
           "line": 16,
           "offset": 171,
         },
-        "start": {
+        "start": Object {
           "column": 1,
           "line": 16,
           "offset": 156,
@@ -313,18 +313,18 @@ tags:
       },
       "type": "footnoteDefinition",
     },
-    {
-      "children": [
-        {
-          "children": [
-            {
-              "position": {
-                "end": {
+    Object {
+      "children": Array [
+        Object {
+          "children": Array [
+            Object {
+              "position": Object {
+                "end": Object {
                   "column": 5,
                   "line": 18,
                   "offset": 177,
                 },
-                "start": {
+                "start": Object {
                   "column": 2,
                   "line": 18,
                   "offset": 174,
@@ -334,13 +334,13 @@ tags:
               "value": "one",
             },
           ],
-          "position": {
-            "end": {
+          "position": Object {
+            "end": Object {
               "column": 6,
               "line": 18,
               "offset": 178,
             },
-            "start": {
+            "start": Object {
               "column": 1,
               "line": 18,
               "offset": 173,
@@ -348,14 +348,14 @@ tags:
           },
           "type": "delete",
         },
-        {
-          "position": {
-            "end": {
+        Object {
+          "position": Object {
+            "end": Object {
               "column": 10,
               "line": 18,
               "offset": 182,
             },
-            "start": {
+            "start": Object {
               "column": 6,
               "line": 18,
               "offset": 178,
@@ -364,16 +364,16 @@ tags:
           "type": "text",
           "value": " or ",
         },
-        {
-          "children": [
-            {
-              "position": {
-                "end": {
+        Object {
+          "children": Array [
+            Object {
+              "position": Object {
+                "end": Object {
                   "column": 15,
                   "line": 18,
                   "offset": 187,
                 },
-                "start": {
+                "start": Object {
                   "column": 12,
                   "line": 18,
                   "offset": 184,
@@ -383,13 +383,13 @@ tags:
               "value": "two",
             },
           ],
-          "position": {
-            "end": {
+          "position": Object {
+            "end": Object {
               "column": 17,
               "line": 18,
               "offset": 189,
             },
-            "start": {
+            "start": Object {
               "column": 10,
               "line": 18,
               "offset": 182,
@@ -397,14 +397,14 @@ tags:
           },
           "type": "delete",
         },
-        {
-          "position": {
-            "end": {
+        Object {
+          "position": Object {
+            "end": Object {
               "column": 25,
               "line": 18,
               "offset": 197,
             },
-            "start": {
+            "start": Object {
               "column": 17,
               "line": 18,
               "offset": 189,
@@ -414,13 +414,13 @@ tags:
           "value": " tildes.",
         },
       ],
-      "position": {
-        "end": {
+      "position": Object {
+        "end": Object {
           "column": 25,
           "line": 18,
           "offset": 197,
         },
-        "start": {
+        "start": Object {
           "column": 1,
           "line": 18,
           "offset": 173,
@@ -428,32 +428,32 @@ tags:
       },
       "type": "paragraph",
     },
-    {
-      "children": [
-        {
-          "position": {
-            "end": {
+    Object {
+      "children": Array [
+        Object {
+          "position": Object {
+            "end": Object {
               "column": 78,
               "line": 20,
               "offset": 276,
             },
-            "start": {
+            "start": Object {
               "column": 1,
               "line": 20,
               "offset": 199,
             },
           },
           "type": "text",
-          "value": "假设你打开了浏览器，并且搜索了 "www.google.com"。 在这个场景内，你的浏览器就是客户端，更宽泛地讲，你可以把你正在使用的计算机当作客户端。",
+          "value": "假设你打开了浏览器，并且搜索了 \\"www.google.com\\"。 在这个场景内，你的浏览器就是客户端，更宽泛地讲，你可以把你正在使用的计算机当作客户端。",
         },
       ],
-      "position": {
-        "end": {
+      "position": Object {
+        "end": Object {
           "column": 78,
           "line": 20,
           "offset": 276,
         },
-        "start": {
+        "start": Object {
           "column": 1,
           "line": 20,
           "offset": 199,
@@ -462,13 +462,13 @@ tags:
       "type": "paragraph",
     },
   ],
-  "position": {
-    "end": {
+  "position": Object {
+    "end": Object {
       "column": 1,
       "line": 21,
       "offset": 277,
     },
-    "start": {
+    "start": Object {
       "column": 1,
       "line": 1,
       "offset": 0,
@@ -498,6 +498,6 @@ tags:
 
 ~~one~~ or ~~two~~ tildes.
 
-假设你打开了浏览器，并且搜索了 "www\\.google.com"。 在这个场景内，你的浏览器就是客户端，更宽泛地讲，你可以把你正在使用的计算机当作客户端。
+假设你打开了浏览器，并且搜索了 \\"www\\\\.google.com\\"。 在这个场景内，你的浏览器就是客户端，更宽泛地讲，你可以把你正在使用的计算机当作客户端。
 "
 `;
