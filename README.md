@@ -4,7 +4,7 @@ lint-md 的解析器，基于 remark 生态，将 Markdown 字符串转换成 AS
 
 单独拆包封装一层的意义是当前 remark 的稳定版本只支持 ESModule，但是 lint-md 主模块依赖了很多 CommonJS 的库，故无法直接迁移到 ESModule。
 
-故将使用 remark 的那部分代码抽离到单独模块然后用 webpack 打包成 CommonJS。
+故将使用 remark 的代码抽离到单独模块，通过 esbuild 同时提供 CommonJS 和 ESModule 产物。
 
 
 ## 快速开始
