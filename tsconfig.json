@@ -9,9 +9,6 @@
     "moduleResolution": "Node",
     "resolveJsonModule": true,
     "types": ["jest", "node"],
-    "allowJs": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
     "sourceMap": true,
     "strictNullChecks": true,
     "skipLibCheck": true
