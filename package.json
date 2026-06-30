@@ -61,11 +61,6 @@
     "webpack": "^5.72.0",
     "webpack-cli": "^4.9.2"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
   "dependencies": {
     "@types/mdast": "^3.0.15",
     "mdast-util-gfm-autolink-literal": "^1.0.2",

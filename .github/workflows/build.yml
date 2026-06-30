@@ -17,9 +17,6 @@ jobs:
         with:
           version: 11.0.9
 
-      - name: Approve build scripts
-        run: pnpm approve-builds esbuild
-
       - name: Install modules and build projects
         run: pnpm install && pnpm run build
 
@@ -39,9 +36,6 @@ jobs:
         uses: pnpm/action-setup@v6.0.8
         with:
           version: 11.0.9
-
-      - name: Approve build scripts
-        run: pnpm approve-builds esbuild
 
       - name: Install modules and build projects
         run: pnpm install && pnpm run build
