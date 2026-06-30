@@ -19,7 +19,6 @@
   },
   "files": [
     "dist/lint-md-parser.js",
-    "dist/lint-md-parser.js.map",
     "dist/lint-md-parser.d.ts",
     "dist/tsdoc-metadata.json"
   ],
