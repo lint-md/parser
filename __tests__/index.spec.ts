@@ -47,4 +47,20 @@ describe('test lint-md-parser', () => {
     const res = revertMdAstNode(ast);
     expect(res).toMatchSnapshot();
   });
+
+  test('quoted www URL is not auto-linked and has position', () => {
+    const root = parseMd('搜索了 "www.google.com"。');
+    const paragraph = root.children[0];
+    expect(paragraph.type).toBe('paragraph');
+    if (paragraph.type === 'paragraph') {
+      expect(paragraph.children).toHaveLength(1);
+      const textNode = paragraph.children[0];
+      expect(textNode.type).not.toBe('link');
+      expect(textNode.type).toBe('text');
+      if (textNode.type === 'text') {
+        expect(textNode.value).toContain('www.google.com');
+        expect(textNode.position).toBeDefined();
+      }
+    }
+  });
 });

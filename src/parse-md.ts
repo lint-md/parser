@@ -6,7 +6,20 @@ import { remark } from 'remark';
 import { gfmAutolinkLiteralFromMarkdown } from 'mdast-util-gfm-autolink-literal';
 import type { MarkdownRoot } from './types';
 
-// https://github.com/remarkjs/remark-gfm/issues/16，解决某些 text 节点没有 position 的问题
+/**
+ * Workaround for https://github.com/remarkjs/remark-gfm/issues/16
+ *
+ * GFM autolink 有两条路径：
+ * 1. 解析器 tokenizer（尖括号语法如 <https://…>、<email@…>、www. 前缀）
+ *    仍在运行，生成带 url/title 的 link 节点。
+ * 2. 后处理 transform（findAndReplace 正则扫描文本中裸 URL）
+ *    通过清除 transforms 禁用，因为其生成的 link 子节点缺少 position。
+ *
+ * 行为示例：
+ * - www.example.com      → link 节点（tokenizer 捕获 www. 前缀）
+ * - <https://ex.com>     → link 节点（tokenizer 捕获尖括号语法）
+ * - "www.google.com"     → text 节点（tokenizer 未捕获，transform 已禁用）
+ */
 gfmAutolinkLiteralFromMarkdown.transforms = [];
 
 const depsLink = remark()
