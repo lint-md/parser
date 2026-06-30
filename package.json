@@ -9,6 +9,8 @@
   ],
   "homepage": "https://github.com/lint-md",
   "license": "MIT",
+  "type": "commonjs",
+  "packageManager": "pnpm@11.0.9",
   "main": "./dist/lint-md-parser.cjs",
   "module": "./dist/lint-md-parser.mjs",
   "typings": "./dist/lint-md-parser.d.ts",
@@ -29,15 +31,18 @@
     "dist/lint-md-parser.mjs",
     "dist/lint-md-parser.d.ts",
     "dist/lint-md-parser.d.cts",
-    "dist/lint-md-parser.d.mts"
+    "dist/lint-md-parser.d.mts",
+    "dist/tsdoc-metadata.json"
   ],
   "scripts": {
     "watch": "tsc -w",
     "build": "rm -rf dist && pnpm run build:dist && pnpm run build:ts-declaration",
-    "build:dist": "NODE_ENV=production webpack --config webpack.config.ts && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser.mjs --minify",
-    "build:ts-declaration": "tsc && api-extractor run --local --verbose",
+    "build:dist": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/lint-md-parser.cjs --minify && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser.mjs --minify",
+    "build:ts-declaration": "tsc && api-extractor run --local --verbose && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.mts",
     "lint": "eslint --ext js,jsx,ts,tsx ./src",
-    "test": "jest",
+    "test": "jest && pnpm run test:types && pnpm run test:package",
+    "test:types": "tsc -p __tests__/types/tsconfig.json",
+    "test:package": "publint",
     "test:update": "jest --updateSnapshot",
     "prepublishOnly": "pnpm run lint && pnpm run build && pnpm run test"
   },
@@ -52,14 +57,10 @@
     "eslint": "^8.57.0",
     "jest": "^27.0.6",
     "npm-run-all": "^4.1.5",
+    "publint": "^0.3.21",
     "rimraf": "^3.0.2",
-    "terser-webpack-plugin": "^5.3.1",
     "ts-jest": "^27.0.4",
-    "ts-loader": "^9.3.0",
-    "ts-node": "^10.1.0",
-    "typescript": "^5.0.0",
-    "webpack": "^5.72.0",
-    "webpack-cli": "^4.9.2"
+    "typescript": "^5.0.0"
   },
   "dependencies": {
     "@types/mdast": "^3.0.15",

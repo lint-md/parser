@@ -18,7 +18,7 @@ jobs:
           version: 11.0.9
 
       - name: Install modules and build projects
-        run: pnpm install && pnpm run build
+        run: pnpm install --frozen-lockfile && pnpm run build
 
       - name: Run tests
         run: pnpm run test
@@ -38,7 +38,7 @@ jobs:
           version: 11.0.9
 
       - name: Install modules and build projects
-        run: pnpm install && pnpm run build
+        run: pnpm install --frozen-lockfile && pnpm run build
 
       - name: Run tests
         run: pnpm run lint
