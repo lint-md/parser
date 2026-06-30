@@ -1,4 +1,12 @@
-import type { Content, Literal, Parent, Root } from 'mdast';
+import type {
+  BlockContent,
+  Content,
+  DefinitionContent,
+  Literal,
+  Parent,
+  PhrasingContent,
+  Root,
+} from 'mdast';
 
 export type { Code, Link, ListItem, Text } from 'mdast';
 
@@ -18,14 +26,17 @@ export interface MarkdownInlineMath extends Literal {
 
 export interface MarkdownContainerDirective extends Parent, MarkdownDirectiveFields {
   type: 'containerDirective'
+  children: Array<BlockContent | DefinitionContent>
 }
 
 export interface MarkdownLeafDirective extends Parent, MarkdownDirectiveFields {
   type: 'leafDirective'
+  children: PhrasingContent[]
 }
 
 export interface MarkdownTextDirective extends Parent, MarkdownDirectiveFields {
   type: 'textDirective'
+  children: PhrasingContent[]
 }
 
 export type MarkdownRoot = Root;
