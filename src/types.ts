@@ -1,13 +1,13 @@
-import type { Code, Content, Link, ListItem, Root, Text } from 'mdast'
+import type { Code, Content, Link, ListItem, Root, Text } from 'mdast';
 
-export type MarkdownRoot = Root
+export type MarkdownRoot = Root;
 
-export type MarkdownNode = MarkdownRoot | Content
+export type MarkdownNode = MarkdownRoot | Content;
 
-export type MarkdownCodeNode = Code
+export type MarkdownCodeNode = Code;
 
-export type MarkdownListItemNode = ListItem
+export type MarkdownListItemNode = ListItem;
 
-export type MarkdownLinkNode = Link
+export type MarkdownLinkNode = Link;
 
-export type MarkdownTextNode = Text
+export type MarkdownTextNode = Text;
