@@ -30,7 +30,8 @@
     "build:ts-declaration": "tsc && api-extractor run --local --verbose",
     "lint": "eslint --ext js,jsx,ts,tsx ./src",
     "test": "jest",
-    "test:update": "jest --updateSnapshot"
+    "test:update": "jest --updateSnapshot",
+    "prepublishOnly": "pnpm run build && pnpm run test"
   },
   "devDependencies": {
     "@attachments/eslint-config": "^0.3.3",
