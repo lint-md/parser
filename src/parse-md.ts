@@ -22,9 +22,9 @@ const depsLink = remark()
  * @returns {MarkdownRoot} md ast 结构
  * @author YuZhanglong <loveyzl1123@gmail.com>
  */
-export function parseMd(md: string): MarkdownRoot {
+export const parseMd = (md: string): MarkdownRoot => {
   return depsLink.parse(md);
-}
+};
 
 /**
  * 将 ast 解析成 markdown
@@ -33,6 +33,6 @@ export function parseMd(md: string): MarkdownRoot {
  * @returns {string} md Markdown 文本
  * @author YuZhanglong <loveyzl1123@gmail.com>
  */
-export function revertMdAstNode(node: MarkdownRoot): string {
+export const revertMdAstNode = (node: MarkdownRoot): string => {
   return depsLink.stringify(node);
-}
+};

@@ -5,4 +5,8 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.ts'],
   coverageDirectory: '<rootDir>/coverage/',
   testEnvironment: 'node',
+  snapshotFormat: {
+    escapeString: false,
+    printBasicPrototype: false,
+  },
 };

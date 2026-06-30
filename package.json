@@ -11,6 +11,9 @@
   "license": "MIT",
   "type": "commonjs",
   "packageManager": "pnpm@11.0.9",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/lint-md-parser.cjs",
   "module": "./dist/lint-md-parser.mjs",
   "typings": "./dist/lint-md-parser.d.ts",
@@ -47,7 +50,7 @@
     "prepublishOnly": "pnpm run lint && pnpm run build && pnpm run test"
   },
   "devDependencies": {
-    "@attachments/eslint-config": "^0.4.0",
+    "@attachments/eslint-config": "^0.3.3",
     "@microsoft/api-extractor": "^7.23.2",
     "@types/jest": "^29.5.0",
     "@types/node": "^22.0.0",
