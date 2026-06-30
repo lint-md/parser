@@ -14,6 +14,7 @@
   "exports": {
     ".": {
       "types": "./dist/lint-md-parser.d.ts",
+      "require": "./dist/lint-md-parser.js",
       "default": "./dist/lint-md-parser.js"
     }
   },
