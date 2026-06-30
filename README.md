@@ -16,6 +16,17 @@ import { parseMd } from '@lint-md/parser';
 const ast = parseMd('你的 Markdown 文本');
 ```
 
+### 序列化说明
+
+`revertMdAstNode` 会将 AST 序列化为 Markdown，但 **不保证恢复原始文本**。
+`revertMdAstNode(parseMd(md))` 会对 Markdown 做规范化：
+
+- 合法的 autolink（`www.…`、`http://…`、`foo@example.com`）会被序列化为标准 GFM 格式
+- 波浪线删除线 `~text~` 会规范化为 `~~text~~`
+- 部分特殊字符会被转义（如 `"www.google.com"` 在序列化时变为 `"www\.google.com"`）
+
+如需语义更明确的名字，可使用别名 `stringifyMdAst`，功能与 `revertMdAstNode` 完全相同。
+
 ## 开发验证
 
 ```bash

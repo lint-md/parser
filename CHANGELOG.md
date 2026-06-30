@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `stringifyMdAst` alias for `revertMdAstNode`
+
 ## 0.0.14
 
 - 使用 mdast 标准类型替代 `Parent & any`，提升类型安全性

@@ -50,12 +50,25 @@ try {
   ]);
   assert.equal(cjsResult, 'root');
 
+  const cjsStringifyResult = run('node', [
+    '-e',
+    "const parser = require('@lint-md/parser'); process.stdout.write(String(parser.stringifyMdAst === parser.revertMdAstNode))",
+  ]);
+  assert.equal(cjsStringifyResult, 'true');
+
   const esmResult = run('node', [
     '--input-type=module',
     '-e',
     "import { parseMd } from '@lint-md/parser'; process.stdout.write(parseMd('# ESM').type)",
   ]);
   assert.equal(esmResult, 'root');
+
+  const esmStringifyResult = run('node', [
+    '--input-type=module',
+    '-e',
+    "import { stringifyMdAst, revertMdAstNode } from '@lint-md/parser'; process.stdout.write(String(stringifyMdAst === revertMdAstNode))",
+  ]);
+  assert.equal(esmStringifyResult, 'true');
 
   writeFileSync(
     join(consumerRoot, 'consumer.mts'),
@@ -68,10 +81,12 @@ try {
       '  MarkdownRoot,',
       '  MarkdownTextDirective,',
       "} from '@lint-md/parser';",
-      "import { parseMd, revertMdAstNode } from '@lint-md/parser';",
+      "import { parseMd, revertMdAstNode, stringifyMdAst } from '@lint-md/parser';",
       '',
       'const markdown: string = revertMdAstNode(parseMd("# ESM"));',
+      'const same: boolean = stringifyMdAst === revertMdAstNode;',
       'void markdown;',
+      'void same;',
       '',
       'function assertType<T>(_val: T): void {}',
       '',
@@ -153,7 +168,9 @@ try {
       "import parser = require('@lint-md/parser');",
       '',
       'const markdown: string = parser.revertMdAstNode(parser.parseMd("# CJS"));',
+      'const same: boolean = parser.stringifyMdAst === parser.revertMdAstNode;',
       'void markdown;',
+      'void same;',
       '',
       'function assertType<T>(_val: T): void {}',
       '',
