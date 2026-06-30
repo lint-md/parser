@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const { parseMd, revertMdAstNode } = require('../dist/lint-md-parser');
+const { parseMd, revertMdAstNode } = require('../dist/lint-md-parser.cjs');
 
 describe('test lint-md-parser', () => {
   const mdDemo = fs
