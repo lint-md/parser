@@ -43,6 +43,7 @@
     "webpack-cli": "^4.9.2"
   },
   "dependencies": {
+    "@types/mdast": "^3.0.15",
     "@types/unist": "^2.0.6",
     "mdast-util-gfm-autolink-literal": "^1.0.2",
     "remark": "^14.0.2",
