@@ -25,6 +25,9 @@ jobs:
       - name: Install modules and build projects
         run: pnpm install --frozen-lockfile && pnpm run build
 
+      - name: Check API report is up to date
+        run: git diff --exit-code etc/
+
       - name: Run tests
         run: pnpm run test
 
