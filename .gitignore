@@ -17,3 +17,7 @@ pnpm-lock.yaml
 esm
 lib
 dist
+
+# local files
+.codegraph
+RELEASE_NOTES.md
