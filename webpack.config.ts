@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as TerserPlugin from 'terser-webpack-plugin';
 
 const config = () => {
-  const isDev = true;
+  const isDev = process.env.NODE_ENV !== 'production';
 
   return {
     entry: './src/index.ts',
