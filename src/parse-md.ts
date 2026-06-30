@@ -18,9 +18,10 @@ const depsLink = remark()
 /**
  * 将 Markdown 解析成 ast
  *
- * @param {string} md Markdown 文本
- * @returns {MarkdownRoot} md ast 结构
- * @author YuZhanglong <loveyzl1123@gmail.com>
+ * @param md - Markdown 文本
+ * @returns md ast 结构
+ *
+ * @public
  */
 export const parseMd = (md: string): MarkdownRoot => {
   return depsLink.parse(md);
@@ -29,9 +30,10 @@ export const parseMd = (md: string): MarkdownRoot => {
 /**
  * 将 ast 解析成 markdown
  *
- * @param {MarkdownRoot} node ast 结构
- * @returns {string} md Markdown 文本
- * @author YuZhanglong <loveyzl1123@gmail.com>
+ * @param node - ast 结构
+ * @returns md Markdown 文本
+ *
+ * @public
  */
 export const revertMdAstNode = (node: MarkdownRoot): string => {
   return depsLink.stringify(node);

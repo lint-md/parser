@@ -25,6 +25,31 @@ pnpm run test:package
 
 `test:package` 会打包并安装实际 tarball，然后验证 CommonJS、ESModule 和 TypeScript 类型入口。
 
+## 维护说明
+
+### 环境要求
+
+- Node.js >= 20
+- pnpm 11（参见 `packageManager` 字段）
+
+```bash
+pnpm install --frozen-lockfile   # 首次安装使用锁文件
+```
+
+### 公开 API 管理
+
+本项目使用 [API Extractor](https://api-extractor.com/) 管理公开 API。
+
+- 所有公开导出必须添加 `/** @public */` 标签
+- JSDoc 注释须遵循 TSDoc 格式：参数写 `@param name - 说明`（不写类型），返回值写 `@returns 说明`
+- 修改公开 API 后运行 `pnpm run build`，API Extractor 会自动更新 `etc/parser.api.md`
+- 将更新后的 API report 文件一并提交
+
+### CI 检查
+
+- `etc/parser.api.md` 过期会导致 CI 构建失败
+- API Extractor 报告的 compiler / extractor / TSDoc warning 均视为错误
+
 ## License
 
 MIT
