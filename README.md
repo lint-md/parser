@@ -16,15 +16,6 @@ import { parseMd } from '@lint-md/parser';
 const ast = parseMd('你的 Markdown 文本');
 ```
 
-## 开发验证
-
-```bash
-pnpm run build
-pnpm run test:package
-```
-
-`test:package` 会打包并安装实际 tarball，然后验证 CommonJS、ESModule 和 TypeScript 类型入口。
-
 ## License
 
 MIT

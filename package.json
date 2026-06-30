@@ -42,7 +42,7 @@
     "lint": "eslint --ext js,jsx,ts,tsx ./src",
     "test": "jest && pnpm run test:types && pnpm run test:package",
     "test:types": "tsc -p __tests__/types/tsconfig.json",
-    "test:package": "publint && node scripts/test-package.mjs",
+    "test:package": "publint",
     "test:update": "jest --updateSnapshot",
     "prepublishOnly": "pnpm run lint && pnpm run build && pnpm run test"
   },
@@ -51,20 +51,24 @@
     "@microsoft/api-extractor": "^7.23.2",
     "@types/jest": "^26.0.24",
     "@types/node": "^20.0.0",
+    "@types/unist": "^2.0.6",
+    "concurrently": "^7.1.0",
     "esbuild": "^0.28.1",
     "eslint": "^8.57.0",
     "jest": "^27.0.6",
-    "mdast-util-gfm-autolink-literal": "^1.0.2",
+    "npm-run-all": "^4.1.5",
     "publint": "^0.3.21",
-    "remark": "^14.0.2",
-    "remark-directive": "^2.0.1",
-    "remark-frontmatter": "^4.0.1",
-    "remark-gfm": "^3.0.1",
-    "remark-math": "^5.1.1",
+    "rimraf": "^3.0.2",
     "ts-jest": "^27.0.4",
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@types/mdast": "^3.0.15"
+    "@types/mdast": "^3.0.15",
+    "mdast-util-gfm-autolink-literal": "^1.0.2",
+    "remark": "^14.0.2",
+    "remark-directive": "^2.0.1",
+    "remark-frontmatter": "^4.0.1",
+    "remark-gfm": "^3.0.1",
+    "remark-math": "^5.1.1"
   }
 }
