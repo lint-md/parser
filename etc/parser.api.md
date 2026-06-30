@@ -90,7 +90,9 @@ export type MarkdownTextNode = Text_2;
 export const parseMd: (md: string) => MarkdownRoot;
 
 // @public
-export const revertMdAstNode: (node: MarkdownRoot) => string;
+const revertMdAstNode: (node: MarkdownRoot) => string;
+export { revertMdAstNode }
+export { revertMdAstNode as stringifyMdAst }
 
 export { Text_2 as Text }
 

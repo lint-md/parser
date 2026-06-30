@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 
-const { parseMd, revertMdAstNode } = require('../dist/lint-md-parser.cjs');
+const { parseMd, revertMdAstNode, stringifyMdAst } = require('../dist/lint-md-parser.cjs');
 
 describe('test lint-md-parser', () => {
   const mdDemo = fs
@@ -36,6 +36,22 @@ describe('test lint-md-parser', () => {
     });
 
     expect(output).toBe('root');
+  });
+
+  test('stringifyMdAst is same function as revertMdAstNode (CJS)', () => {
+    expect(stringifyMdAst).toBe(revertMdAstNode);
+  });
+
+  test('stringifyMdAst is same function as revertMdAstNode (ESM)', () => {
+    const output = execFileSync(process.execPath, [
+      '--input-type=module',
+      '-e',
+      "import { stringifyMdAst, revertMdAstNode } from '@lint-md/parser'; process.stdout.write(String(stringifyMdAst === revertMdAstNode))",
+    ], {
+      cwd: path.resolve(__dirname, '..'),
+      encoding: 'utf8',
+    });
+    expect(output).toBe('true');
   });
 
   test('invoke parseMd', () => {
