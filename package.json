@@ -11,9 +11,17 @@
   "license": "MIT",
   "main": "./dist/lint-md-parser.js",
   "typings": "./dist/lint-md-parser.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lint-md-parser.d.ts",
+      "require": "./dist/lint-md-parser.js",
+      "default": "./dist/lint-md-parser.js"
+    }
+  },
   "files": [
-    "src",
-    "dist"
+    "dist/lint-md-parser.js",
+    "dist/lint-md-parser.d.ts",
+    "dist/tsdoc-metadata.json"
   ],
   "scripts": {
     "watch": "tsc -w",
@@ -26,6 +34,7 @@
   },
   "devDependencies": {
     "@attachments/eslint-config": "^0.3.3",
+    "@types/unist": "^2.0.6",
     "@microsoft/api-extractor": "^7.23.2",
     "@types/jest": "^26.0.24",
     "@types/node": "^20.0.0",
@@ -44,7 +53,6 @@
   },
   "dependencies": {
     "@types/mdast": "^3.0.15",
-    "@types/unist": "^2.0.6",
     "mdast-util-gfm-autolink-literal": "^1.0.2",
     "remark": "^14.0.2",
     "remark-directive": "^2.0.1",
