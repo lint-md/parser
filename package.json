@@ -9,24 +9,32 @@
   ],
   "homepage": "https://github.com/lint-md",
   "license": "MIT",
-  "main": "./dist/lint-md-parser.js",
+  "main": "./dist/lint-md-parser.cjs",
+  "module": "./dist/lint-md-parser.mjs",
   "typings": "./dist/lint-md-parser.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/lint-md-parser.d.ts",
-      "require": "./dist/lint-md-parser.js",
-      "default": "./dist/lint-md-parser.js"
+      "import": {
+        "types": "./dist/lint-md-parser.d.mts",
+        "default": "./dist/lint-md-parser.mjs"
+      },
+      "require": {
+        "types": "./dist/lint-md-parser.d.cts",
+        "default": "./dist/lint-md-parser.cjs"
+      }
     }
   },
   "files": [
-    "dist/lint-md-parser.js",
+    "dist/lint-md-parser.cjs",
+    "dist/lint-md-parser.mjs",
     "dist/lint-md-parser.d.ts",
-    "dist/tsdoc-metadata.json"
+    "dist/lint-md-parser.d.cts",
+    "dist/lint-md-parser.d.mts"
   ],
   "scripts": {
     "watch": "tsc -w",
     "build": "rm -rf dist && pnpm run build:dist && pnpm run build:ts-declaration",
-    "build:dist": "NODE_ENV=production webpack --config webpack.config.ts",
+    "build:dist": "NODE_ENV=production webpack --config webpack.config.ts && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser.mjs --minify",
     "build:ts-declaration": "tsc && api-extractor run --local --verbose",
     "lint": "eslint --ext js,jsx,ts,tsx ./src",
     "test": "jest",
@@ -35,11 +43,12 @@
   },
   "devDependencies": {
     "@attachments/eslint-config": "^0.3.3",
-    "@types/unist": "^2.0.6",
     "@microsoft/api-extractor": "^7.23.2",
     "@types/jest": "^26.0.24",
     "@types/node": "^20.0.0",
+    "@types/unist": "^2.0.6",
     "concurrently": "^7.1.0",
+    "esbuild": "^0.28.1",
     "eslint": "^8.57.0",
     "jest": "^27.0.6",
     "npm-run-all": "^4.1.5",

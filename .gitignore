@@ -11,7 +11,6 @@ coverage
 # lock files
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
 
 # build files
 esm
@@ -21,3 +20,4 @@ dist
 # local files
 .codegraph
 RELEASE_NOTES.md
+IMPROVEMENT_PLAN.md

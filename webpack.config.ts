@@ -9,7 +9,7 @@ const config = () => {
     output: {
       // 打包成 commonjs 模块，放入 lib 目录下
       path: path.resolve(process.cwd(), 'dist'),
-      filename: 'lint-md-parser.js',
+      filename: 'lint-md-parser.cjs',
       library: {
         type: 'commonjs',
       },
