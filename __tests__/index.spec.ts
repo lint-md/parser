@@ -1,8 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-
-const { parseMd, revertMdAstNode, stringifyMdAst } = require('../dist/lint-md-parser.cjs');
+import { parseMd, revertMdAstNode, stringifyMdAst } from './helpers';
 
 describe('test lint-md-parser', () => {
   const mdDemo = fs
