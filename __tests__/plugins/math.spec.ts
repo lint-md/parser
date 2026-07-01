@@ -57,4 +57,14 @@ describe('remark-math plugin', () => {
       expect(node.value).toBe('\\int_0^\\infty e^{-x} dx');
     }
   });
+
+  test('block math with meta', () => {
+    const root = parseMd('$$ {#eq1}\nx^2\n$$');
+    const node = root.children[0];
+    expect(node.type).toBe('math');
+    if (node.type === 'math') {
+      expect(node.value).toBe('x^2');
+      expect(node.meta).toBe('{#eq1}');
+    }
+  });
 });
