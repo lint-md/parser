@@ -73,6 +73,32 @@ describe('edge cases', () => {
     expect(root.children).toHaveLength(1);
     const list = root.children[0];
     expect(list.type).toBe('list');
+
+    // Verify 5 levels of nesting
+    const item1 = list.children[0];
+    expect(item1.type).toBe('listItem');
+    const nestedList1 = item1.children[1];
+    expect(nestedList1.type).toBe('list');
+
+    const item2 = nestedList1.children[0];
+    expect(item2.type).toBe('listItem');
+    const nestedList2 = item2.children[1];
+    expect(nestedList2.type).toBe('list');
+
+    const item3 = nestedList2.children[0];
+    expect(item3.type).toBe('listItem');
+    const nestedList3 = item3.children[1];
+    expect(nestedList3.type).toBe('list');
+
+    const item4 = nestedList3.children[0];
+    expect(item4.type).toBe('listItem');
+    const nestedList4 = item4.children[1];
+    expect(nestedList4.type).toBe('list');
+
+    const item5 = nestedList4.children[0];
+    expect(item5.type).toBe('listItem');
+    const paragraph = item5.children[0];
+    expect(paragraph.type).toBe('paragraph');
   });
 
   test('emoji', () => {
@@ -86,6 +112,7 @@ describe('edge cases', () => {
       expect(text.type).toBe('text');
       if (text.type === 'text') {
         expect(text.value).toBe('🎉🚀✨');
+        expect(text.position).toBeDefined();
       }
     }
   });
@@ -99,6 +126,9 @@ describe('edge cases', () => {
       expect(paragraph.children).toHaveLength(1);
       const text = paragraph.children[0];
       expect(text.type).toBe('text');
+      if (text.type === 'text') {
+        expect(text.value).toBe('\u200B\u200C\u200D');
+      }
     }
   });
 
@@ -129,6 +159,7 @@ describe('edge cases', () => {
       if (image.type === 'image') {
         expect(image.url).toBe('url');
         expect(image.alt).toBe('alt');
+        expect(image.title).toBe('title');
       }
     }
   });
