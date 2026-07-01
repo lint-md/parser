@@ -9,15 +9,24 @@ describe('remark-directive plugin', () => {
     if (node.type === 'containerDirective') {
       expect(node.name).toBe('note');
       expect(node.attributes).toBeDefined();
+      expect(node.children).toHaveLength(1);
+      const paragraph = node.children[0];
+      expect(paragraph.type).toBe('paragraph');
     }
   });
 
-  test('leaf directive :::warning', () => {
-    const root = parseMd(':::warning\n');
+  test('leaf directive ::warning[content]', () => {
+    const root = parseMd('::warning[content]');
     const node = root.children[0];
-    expect(node.type).toBe('containerDirective');
-    if (node.type === 'containerDirective') {
+    expect(node.type).toBe('leafDirective');
+    if (node.type === 'leafDirective') {
       expect(node.name).toBe('warning');
+      expect(node.children).toHaveLength(1);
+      const child = node.children[0];
+      expect(child.type).toBe('text');
+      if (child.type === 'text') {
+        expect(child.value).toBe('content');
+      }
     }
   });
 
