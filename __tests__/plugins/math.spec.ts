@@ -1,4 +1,4 @@
-const { parseMd } = require('../../dist/lint-md-parser.cjs');
+import { parseMd } from '../helpers';
 
 describe('remark-math plugin', () => {
   test('block math with $$ on separate lines', () => {
