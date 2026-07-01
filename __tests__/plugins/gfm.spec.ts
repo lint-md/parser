@@ -1,13 +1,13 @@
 import { parseMd } from '../helpers';
 
 describe('remark-gfm plugin', () => {
-  test('table', () => {
-    const root = parseMd('| a | b |\n|---|---|\n| 1 | 2 |');
+  test('table with alignment', () => {
+    const root = parseMd('| a | b |\n|:---|---:|\n| 1 | 2 |');
     expect(root.children).toHaveLength(1);
     const node = root.children[0];
     expect(node.type).toBe('table');
     if (node.type === 'table') {
-      expect(node.align).toEqual([null, null]);
+      expect(node.align).toEqual(['left', 'right']);
       expect(node.children).toHaveLength(2);
     }
   });
@@ -33,6 +33,19 @@ describe('remark-gfm plugin', () => {
     expect(node.type).toBe('footnoteDefinition');
     if (node.type === 'footnoteDefinition') {
       expect(node.identifier).toBe('1');
+    }
+  });
+
+  test('footnote reference', () => {
+    const root = parseMd('text [^1]\n\n[^1]: note');
+    const paragraph = root.children[0];
+    expect(paragraph.type).toBe('paragraph');
+    if (paragraph.type === 'paragraph') {
+      const ref = paragraph.children.find((child) => child.type === 'footnoteReference');
+      expect(ref).toBeDefined();
+      if (ref?.type === 'footnoteReference') {
+        expect(ref.identifier).toBe('1');
+      }
     }
   });
 
