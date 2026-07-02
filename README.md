@@ -37,8 +37,9 @@ const ast = parseMd('你的 Markdown 文本');
 import { parseMd, type PositionedMarkdownNode } from '@lint-md/parser';
 
 const ast = parseMd('# title');
-ast.position.start.offset;            // number
-ast.children[0].position.end.offset;  // number
+ast.position.start.offset;                                  // number
+const firstNode: PositionedMarkdownNode = ast.children[0];
+firstNode.position.end.offset;                              // number
 ```
 
 契约由三件事保证：
