@@ -4,7 +4,7 @@ import remarkDirective from 'remark-directive';
 import remarkMath from 'remark-math';
 import { remark } from 'remark';
 import { gfmAutolinkLiteralFromMarkdown } from 'mdast-util-gfm-autolink-literal';
-import type { MarkdownRoot } from './types';
+import type { MarkdownRoot, PositionedMarkdownRoot } from './types';
 
 /**
  * Workaround for https://github.com/remarkjs/remark-gfm/issues/16
@@ -32,12 +32,12 @@ const depsLink = remark()
  * 将 Markdown 解析成 ast
  *
  * @param md - Markdown 文本
- * @returns md ast 结构
+ * @returns 解析后的 AST 根节点，递归带 position（含 start/end.offset）
  *
  * @public
  */
-export const parseMd = (md: string): MarkdownRoot => {
-  return depsLink.parse(md);
+export const parseMd = (md: string): PositionedMarkdownRoot => {
+  return depsLink.parse(md) as PositionedMarkdownRoot;
 };
 
 /**
