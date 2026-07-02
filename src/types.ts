@@ -10,22 +10,36 @@ import type {
 
 export type { Code, Link, ListItem, Text } from 'mdast';
 
-/** @public */
+/**
+ * A 1-based line and column with a 0-based character offset from the start of
+ * the input.
+ *
+ * @public
+ */
 export interface ParsedPoint {
+  /** 1-based line number */
   line: number
+  /** 1-based column number */
   column: number
+  /** 0-based character offset from the beginning of the input */
   offset: number
 }
 
-/** @public */
+/**
+ * Start and end positions of a parsed AST node.
+ *
+ * @public
+ */
 export interface ParsedPosition {
+  /** Position of the first character of the node */
   start: ParsedPoint
+  /** Position of the first character after the node */
   end: ParsedPoint
 }
 
 /**
- * Recursively rewrites a mdast node so `position` and its
- * nested `start/end.offset` are non-optional.
+ * Recursively rewrites a mdast node so `position` and its nested
+ * `start/end.offset` are non-optional.
  *
  * @public
  */
@@ -91,8 +105,18 @@ export type MarkdownLinkNode = import('mdast').Link;
 /** @public */
 export type MarkdownTextNode = import('mdast').Text;
 
-/** @public */
+/**
+ * The AST root returned by `parseMd`, with non-optional `position`
+ * (including `start/end.offset`) on every node in the tree.
+ *
+ * @public
+ */
 export type PositionedMarkdownRoot = Positioned<MarkdownRoot>;
 
-/** @public */
+/**
+ * Any AST node returned by `parseMd`, with non-optional `position`
+ * (including `start/end.offset`).
+ *
+ * @public
+ */
 export type PositionedMarkdownNode = Positioned<MarkdownNode>;

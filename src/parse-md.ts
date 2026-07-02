@@ -37,6 +37,20 @@ const depsLink = remark()
  * @public
  */
 export const parseMd = (md: string): PositionedMarkdownRoot => {
+  // The `as PositionedMarkdownRoot` cast asserts a parser-level contract:
+  // the AST returned by `remark().parse()` is fully positioned.
+  //
+  // The contract rests on three guarantees:
+  // 1. `gfmAutolinkLiteralFromMarkdown.transforms = []` above disables
+  //    the GFM autolink post-process, which is the only known path that
+  //    can synthesize children without a `position` (see
+  //    https://github.com/remarkjs/remark-gfm/issues/16).
+  // 2. The unified processor is module-level and reused across calls,
+  //    so behavior does not drift between invocations.
+  // 3. `__tests__/position.spec.ts` traverses the parsed tree and
+  //    asserts every node carries a complete `position`. If a future
+  //    plugin or remark upgrade violates the contract, the test fails
+  //    before this cast can silently propagate to downstream code.
   return depsLink.parse(md) as PositionedMarkdownRoot;
 };
 

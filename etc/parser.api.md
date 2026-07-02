@@ -86,21 +86,16 @@ export interface MarkdownTextDirective extends Parent, MarkdownDirectiveFields {
 // @public (undocumented)
 export type MarkdownTextNode = Text_2;
 
-// @public (undocumented)
+// @public
 export interface ParsedPoint {
-    // (undocumented)
     column: number;
-    // (undocumented)
     line: number;
-    // (undocumented)
     offset: number;
 }
 
-// @public (undocumented)
+// @public
 export interface ParsedPosition {
-    // (undocumented)
     end: ParsedPoint;
-    // (undocumented)
     start: ParsedPoint;
 }
 
@@ -117,10 +112,10 @@ export type Positioned<T> = T extends {
     position: ParsedPosition;
 };
 
-// @public (undocumented)
+// @public
 export type PositionedMarkdownNode = Positioned<MarkdownNode>;
 
-// @public (undocumented)
+// @public
 export type PositionedMarkdownRoot = Positioned<MarkdownRoot>;
 
 // @public
