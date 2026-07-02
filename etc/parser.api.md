@@ -87,7 +87,36 @@ export interface MarkdownTextDirective extends Parent, MarkdownDirectiveFields {
 export type MarkdownTextNode = Text_2;
 
 // @public
-export const parseMd: (md: string) => MarkdownRoot;
+export interface ParsedPoint {
+    column: number;
+    line: number;
+    offset: number;
+}
+
+// @public
+export interface ParsedPosition {
+    end: ParsedPoint;
+    start: ParsedPoint;
+}
+
+// @public
+export const parseMd: (md: string) => PositionedMarkdownRoot;
+
+// @public
+export type Positioned<T> = T extends {
+    children: Array<infer Child>;
+} ? Omit<T, 'position' | 'children'> & {
+    position: ParsedPosition;
+    children: Array<Positioned<Child>>;
+} : Omit<T, 'position'> & {
+    position: ParsedPosition;
+};
+
+// @public
+export type PositionedMarkdownNode = Positioned<MarkdownNode>;
+
+// @public
+export type PositionedMarkdownRoot = Positioned<MarkdownRoot>;
 
 // @public
 const revertMdAstNode: (node: MarkdownRoot) => string;
