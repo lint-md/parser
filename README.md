@@ -31,30 +31,25 @@ const ast = parseMd('你的 Markdown 文本');
 
 `parseMd` 返回的 AST 节点**总是**带 `position`，且 `position.start` 与
 `position.end` 的 `line` / `column` / `offset` 字段都是 `number`（而非 `undefined`）。
-这个契约通过 `PositionedMarkdownRoot` / `PositionedMarkdownNode` 在类型层表达：
+这个契约通过 `PositionedMarkdownRoot` / `PositionedMarkdownNode` 在类型层表达，
+因此直接解析和遍历 AST 时不需要额外判空：
 
 ```ts
 import { parseMd, type PositionedMarkdownNode } from '@lint-md/parser';
 
 const ast = parseMd('# title');
-ast.position.start.offset;                                  // number
+ast.position.start.offset; // number
+
 const firstNode: PositionedMarkdownNode = ast.children[0];
-firstNode.position.end.offset;                              // number
+firstNode.position.end.offset; // number
 ```
 
-契约由三件事保证：
-
-- `gfmAutolinkLiteralFromMarkdown.transforms` 被清空，禁用了 GFM autolink
-  会合成无 position 子节点的后处理路径。
-- `src/parse-md.ts` 的 `parseMd` 实现里写明了契约来源注释，并在 `as` 断言处说明
-  三个保证的来源。
-- `__tests__/position.spec.ts` 遍历解析树，对每个节点断言 `position.start` /
-  `position.end` 的 `line` / `column` / `offset` 全部是 `number`，并校验
-  `start.offset <= end.offset`。
-
 > **注意**：`MarkdownRoot` / `MarkdownNode` 仍透传 mdast 原生类型（即 `position` 可选），
-> 因为这两个类型也用于接收外部构造或 `revertMdAstNode` 反序列化的 AST，运行时未必总有
-> position。如果需要"必有 position"约束，使用 `PositionedMarkdownRoot` / `PositionedMarkdownNode`。
+> 因为外部构造或修改后的 AST 未必带 position。如果需要“必有 position”约束，使用
+> `PositionedMarkdownRoot` / `PositionedMarkdownNode`。
+>
+> 如果要向解析结果插入自行构造的无 position 节点，请先将其类型放宽为 `MarkdownRoot`，
+> 或为新节点补齐 position。
 
 ## 开发验证
 

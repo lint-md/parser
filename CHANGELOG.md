@@ -6,11 +6,11 @@
 
 - 新增 `ParsedPoint` / `ParsedPosition` / `Positioned<T>` / `PositionedMarkdownRoot` / `PositionedMarkdownNode` 公开类型
 - `parseMd` 返回类型收紧为 `PositionedMarkdownRoot`，在 API 边界表达"所有解析节点都带 `position` 与 `start/end.offset`"的运行时契约
-- README 增加"位置契约"小节
+- README 增加“位置契约”及修改 AST 时的类型注意事项
 
 ### Tests
 
-- 新增 `__tests__/position.spec.ts`，参数化覆盖 24 个节点类型（frontmatter / heading / thematicBreak / blockquote / list / task list / table / strikethrough / inline code / code block / hard break / autolink / link / image / reference / definition / html / math / directive 等），递归断言每个节点的 `position` 完整
+- 新增 `__tests__/position.spec.ts`，覆盖 frontmatter、GFM、math 和 directive 等插件生成的解析树，递归断言其中每个节点的 `position` 完整
 - `__tests__/types/package-exports.{mts,cts}` 验证 `parseMd(...).position.start.offset` 编译为 `number`
 
 ## 0.1.0
