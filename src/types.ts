@@ -11,6 +11,34 @@ import type {
 export type { Code, Link, ListItem, Text } from 'mdast';
 
 /** @public */
+export interface ParsedPoint {
+  line: number
+  column: number
+  offset: number
+}
+
+/** @public */
+export interface ParsedPosition {
+  start: ParsedPoint
+  end: ParsedPoint
+}
+
+/**
+ * Recursively rewrites a mdast node so `position` and its
+ * nested `start/end.offset` are non-optional.
+ *
+ * @public
+ */
+export type Positioned<T> = T extends { children: Array<infer Child> }
+  ? Omit<T, 'position' | 'children'> & {
+    position: ParsedPosition
+    children: Array<Positioned<Child>>
+  }
+  : Omit<T, 'position'> & {
+    position: ParsedPosition
+  };
+
+/** @public */
 export interface MarkdownDirectiveFields {
   name: string
   attributes?: Record<string, string | null | undefined> | null | undefined
@@ -62,3 +90,9 @@ export type MarkdownLinkNode = import('mdast').Link;
 
 /** @public */
 export type MarkdownTextNode = import('mdast').Text;
+
+/** @public */
+export type PositionedMarkdownRoot = Positioned<MarkdownRoot>;
+
+/** @public */
+export type PositionedMarkdownNode = Positioned<MarkdownNode>;
