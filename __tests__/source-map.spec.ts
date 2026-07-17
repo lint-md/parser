@@ -305,19 +305,31 @@ describe('parseMdWithSourceMap: contract', () => {
     expect(sourceMap.getRaw(t)).toBe('&#0;');
   });
 
-  test('zero-length range resolves to a point at a literal boundary', () => {
-    const { ast, sourceMap } = parseMdWithSourceMap('ab');
-    const t = textNodes(ast)[0];
-    const range = sourceMap.getSourceRange(t, 1, 1);
-    expect(range.start.offset).toBe(range.end.offset);
-    expect(range.start.offset).toBe(1);
+  test('zero-length range resolves to an accurate source point', () => {
+    // 'ab' literal -> [0,0) point at offset 0, [2,2) point at offset 2.
+    const ab = parseMdWithSourceMap('ab');
+    const tAb = textNodes(ab.ast)[0];
+    expect(ab.sourceMap.getSourceRange(tAb, 0, 0).start.offset).toBe(0);
+    expect(ab.sourceMap.getSourceRange(tAb, 2, 2).start.offset).toBe(2);
+
+    // '&amp;' -> value '&'; [0,0) is the entity's start = source offset 0.
+    const amp = parseMdWithSourceMap('&amp;');
+    const tAmp = textNodes(amp.ast)[0];
+    expect(amp.sourceMap.getSourceRange(tAmp, 0, 0).start.offset).toBe(0);
+
+    // '&amp;&copy;' -> value '&©'; [1,1) sits between the two entities at
+    // source offset 5 (an accurate boundary, not inside an atomic construct).
+    const adj = parseMdWithSourceMap('&amp;&copy;');
+    const tAdj = textNodes(adj.ast)[0];
+    expect(adj.sourceMap.getSourceRange(tAdj, 1, 1).start.offset).toBe(5);
   });
 
-  test('zero-length range inside an atomic construct throws', () => {
-    const { ast, sourceMap } = parseMdWithSourceMap('&amp;&copy;');
+  test('zero-length range inside a multi-code-unit atomic construct throws', () => {
+    // '&Afr;' decodes to a surrogate pair (value length 2); [1,1) lands inside
+    // the atomic entity, where no accurate source boundary exists.
+    const { ast, sourceMap } = parseMdWithSourceMap('&Afr;');
     const t = textNodes(ast)[0];
-    expect(() => sourceMap.getSourceRange(t, 0, 0)).toThrow(RangeError);
-    expect(() => sourceMap.getSourceRange(t, 5, 5)).toThrow(RangeError);
+    expect(() => sourceMap.getSourceRange(t, 1, 1)).toThrow(RangeError);
   });
 
   test('valueEnd does not swallow the following entity/escape (P1)', () => {

@@ -27,6 +27,7 @@
 - `getRaw` / `getSourceRange` 增加文档归属校验：通过解析后遍历 AST 建立 `WeakSet`，拒绝外来节点（来自另一次 `parseMdWithSourceMap` 调用），不再用外部 offset 静默切当前文档
 - `getSourceRange` 增加有限整数校验，`valueStart` / `valueEnd` 必须为有限整数，否则抛 `RangeError`
 - 抽取共享模块 `src/remark-config.ts`（`createParserProcessor` / `getParserExtensions`），`parseMd` 与 `parseMdWithSourceMap` 复用同一套插件栈与冻结的 parser 扩展，降低 AST 漂移风险
+- 空区间 `[i,i)` 改为单独解析为单一 source point：起点 / 终点 / 某 segment 起点 / literal 段内部均返回准确边界；仅多 code unit 原子段（如 `&Afr;` 的 surrogate pair）内部才抛 `RangeError`，不再把 `[0,0)` 错误变成 `[0,1)` 或误拒原子段的精确起点
 - README 示例修正：`A&amp;B` 中 `&amp;` 的半开区间为 `[1, 6)`（原写为 `[2, 5)`）
 
 ### Tests

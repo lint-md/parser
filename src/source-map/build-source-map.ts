@@ -421,18 +421,36 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         return seg.sourceStart + units;
       };
 
-      // An empty range [i, i) is only meaningful at a literal boundary. Inside
-      // an atomic (escape / character-reference / normalization) segment there
-      // is no accurate source boundary to return, so it throws.
+      // An empty range [i, i) denotes a single source point. Resolve it
+      // directly: only a multi-code-unit atomic construct (escape / character
+      // reference / normalization) has no accurate boundary inside it.
       if (valueStart === valueEnd) {
-        const seg = findSegmentAt(segs, valueStart);
-        if (seg && seg.kind !== 'literal') {
-          throw new RangeError(
-            'getSourceRange: empty range falls inside an atomic construct '
-              + '(escape / character reference / normalization) where no '
-              + 'accurate source boundary exists',
-          );
+        const index = valueStart;
+        const pointRange = (offset: number): ParsedPosition => ({
+          start: pointAtOffset(lineStarts, md, offset),
+          end: pointAtOffset(lineStarts, md, offset),
+        });
+        if (index === 0) {
+          return pointRange(segs[0].sourceStart);
         }
+        if (index === node.value.length) {
+          return pointRange(segs[segs.length - 1].sourceEnd);
+        }
+        const seg = findSegmentAt(segs, index);
+        // Exactly at a segment's start: accurate boundary.
+        if (seg && index === seg.valueStart) {
+          return pointRange(seg.sourceStart);
+        }
+        // A boundary inside a literal segment is 1:1 accurate.
+        if (seg?.kind === 'literal') {
+          return pointRange(seg.sourceStart + index - seg.valueStart);
+        }
+        // Inside a multi-code-unit atomic segment: no accurate boundary.
+        throw new RangeError(
+          'getSourceRange: empty range falls inside an atomic construct '
+            + '(escape / character reference / normalization) where no '
+            + 'accurate source boundary exists',
+        );
       }
 
       const startOffset = sourceOffsetAt(valueStart, false);
