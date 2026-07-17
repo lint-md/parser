@@ -20,6 +20,19 @@
 - `getRaw(node)` 改用节点自身的 `position` 从原文切片，对任意带 position 的 AST 节点（root、paragraph 等）都有效，不再仅限被记录的 text 节点
 - 非法码点（如 `&#0;` / `&#128;` / `&#xFDD0;`）正确记录为 `normalization` kind，而非 `character-reference`
 
+### Changed
+
+- `getSourceRange` 的结束位置改由 `valueEnd - 1` 所在 segment 计算，避免 `[0,1)` 误吞紧随其后的实体 / 转义（如 `A&amp;B` 仅映射 `A`）；空区间 `[i,i)` 若落在原子段内部则抛出 `RangeError`，因为那里不存在准确的原文边界
+- `getRaw(textNode)` 改为使用已记录的 source-map segment 的**完整** outer-token 区间（如 `&#0;` 现在返回完整的 `&#0;`，含结尾分号）；非 text 节点仍使用节点自身 `position`
+- `getRaw` / `getSourceRange` 增加文档归属校验：通过解析后遍历 AST 建立 `WeakSet`，拒绝外来节点（来自另一次 `parseMdWithSourceMap` 调用），不再用外部 offset 静默切当前文档
+- `getSourceRange` 增加有限整数校验，`valueStart` / `valueEnd` 必须为有限整数，否则抛 `RangeError`
+- 抽取共享模块 `src/remark-config.ts`（`createParserProcessor` / `getParserExtensions`），`parseMd` 与 `parseMdWithSourceMap` 复用同一套插件栈与冻结的 parser 扩展，降低 AST 漂移风险
+- README 示例修正：`A&amp;B` 中 `&amp;` 的半开区间为 `[1, 6)`（原写为 `[2, 5)`）
+
+### Tests
+
+- `__tests__/source-map.spec.ts` 补充 P1 / P2 / P4 回归用例，并新增 `parseMd` 与 `parseMdWithSourceMap` 的 AST 一致性 corpus / property 测试（覆盖 GFM、directive、math、frontmatter、混合换行、astral Unicode 等）
+
 ## 0.1.2
 
 ### Added

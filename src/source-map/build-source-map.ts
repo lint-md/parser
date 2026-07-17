@@ -1,9 +1,3 @@
-import frontmatter from 'remark-frontmatter';
-import remarkGfm from 'remark-gfm';
-import remarkDirective from 'remark-directive';
-import remarkMath from 'remark-math';
-import { remark } from 'remark';
-import { gfmAutolinkLiteralFromMarkdown } from 'mdast-util-gfm-autolink-literal';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-character-reference';
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
@@ -15,32 +9,18 @@ import type {
   ParsedPosition,
   PositionedMarkdownRoot,
 } from '../types';
+import { getParserExtensions } from '../remark-config';
 import type {
   MarkdownSourceMap,
   MarkdownSourceMapSegment,
   ParsedMarkdownDocument,
 } from './types';
 
-// Mirror the plugin stack used by `parseMd` so the source map is built by the
-// exact same tokenizer / mdast-extension decision path. Only the mdast
+// Use the exact same parser extensions as `parseMd` so the AST (and therefore
+// the tokenizer / mdast-extension decisions) are identical. Only the mdast
 // `text`-building handlers are swapped for recording ones; every other token
 // is compiled by the real `mdast-util-from-markdown` handlers.
-gfmAutolinkLiteralFromMarkdown.transforms = [];
-
-// Freeze a copy to read the micromark + from-markdown extensions the plugins
-// registered. These describe the real parser's decisions (including whether an
-// `&amp;` inside an autolink is decoded or kept literal).
-const frozen = remark()
-  .use(frontmatter)
-  .use(remarkGfm)
-  .use(remarkDirective)
-  .use(remarkMath);
-frozen.freeze();
-const extensionsData = frozen.data();
-const micromarkExtensions: unknown[]
-  = (extensionsData.micromarkExtensions as unknown[]) || [];
-const fromMarkdownExtensions: unknown[]
-  = (extensionsData.fromMarkdownExtensions as unknown[]) || [];
+const { micromarkExtensions, fromMarkdownExtensions } = getParserExtensions();
 
 interface RecordingState {
   /** Text node currently being appended to. */
@@ -323,13 +303,36 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const ast = tree as unknown as PositionedMarkdownRoot;
   const lineStarts = computeLineStarts(md);
 
+  // Record every node that belongs to this document so `getRaw` /
+  // `getSourceRange` can reject foreign nodes instead of silently slicing the
+  // wrong Markdown with a stolen offset.
+  const owned = new WeakSet<object>();
+  (function register(node: any) {
+    owned.add(node);
+    for (const child of node.children || []) register(child);
+  })(ast);
+
   const sourceMap: MarkdownSourceMap = {
     getRaw(node: MarkdownNode): string {
+      if (!owned.has(node as object)) {
+        throw new RangeError(
+          'getRaw: the given node does not belong to this document; pass a '
+            + 'node from the tree returned by the same parseMdWithSourceMap() call',
+        );
+      }
+      const segs = state.segments.get(node as object);
+      if (segs && segs.length > 0) {
+        // Text nodes with a source map: use the full recorded outer-token
+        // span, which covers the complete raw source that produced the value
+        // (e.g. '&#0;' includes the trailing ';' even though the parser
+        // positions the text node one code unit earlier).
+        return md.slice(segs[0].sourceStart, segs[segs.length - 1].sourceEnd);
+      }
       const position = (node as { position?: ParsedPosition }).position;
       if (!position || !position.start || !position.end) {
         throw new RangeError(
-          'getRaw: the given node has no source position; it is either '
-            + 'not part of this document, or was synthesized without a source span',
+          'getRaw: the given node has no source position; it may have been '
+            + 'synthesized without a source span',
         );
       }
       return md.slice(position.start.offset, position.end.offset);
@@ -340,6 +343,24 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       valueStart: number,
       valueEnd: number,
     ): ParsedPosition {
+      if (!owned.has(node as object)) {
+        throw new RangeError(
+          'getSourceRange: the given node does not belong to this document; '
+            + 'pass a node from the tree returned by the same '
+            + 'parseMdWithSourceMap() call',
+        );
+      }
+      if (
+        !Number.isInteger(valueStart)
+        || !Number.isInteger(valueEnd)
+        || !Number.isFinite(valueStart)
+        || !Number.isFinite(valueEnd)
+      ) {
+        throw new RangeError(
+          'getSourceRange: valueStart and valueEnd must be finite integers, '
+            + `got [${valueStart}, ${valueEnd})`,
+        );
+      }
       const segs = state.segments.get(node as object);
       if (!segs) {
         throw new RangeError(
@@ -348,7 +369,11 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
             + 'source span',
         );
       }
-      if (valueStart < 0 || valueEnd > node.value.length || valueStart > valueEnd) {
+      if (
+        valueStart < 0
+        || valueEnd > node.value.length
+        || valueStart > valueEnd
+      ) {
         throw new RangeError(
           `getSourceRange: value range [${valueStart}, ${valueEnd}) is out of `
             + `bounds for a text node of length ${node.value.length}`,
@@ -359,7 +384,22 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       // produced them as a single unit, so any value range intersecting such a
       // segment must map back to that segment's *complete* source span. Only
       // `literal` segments support per-code-unit boundaries (they are 1:1).
-      const sourceOffsetAt = (valueIndex: number, atEnd: boolean): number => {
+      //
+      // The start boundary is the segment containing `valueStart`; the end
+      // boundary is the segment containing `valueEnd - 1` (the last value unit
+      // included), so a range that stops exactly at an atomic segment's start
+      // does NOT pull that segment in. An empty range [i, i) is only valid at a
+      // literal boundary: if `i` falls inside an atomic segment there is no
+      // accurate source boundary to return, so it throws.
+      //
+      // `pastUnit` distinguishes the start of a unit (false) from the offset
+      // just *after* the unit (true). For a literal segment the source offset
+      // is `sourceStart + unitsConsumed`, where `unitsConsumed` counts value
+      // units from the segment's own start.
+      const sourceOffsetAt = (
+        valueIndex: number,
+        pastUnit: boolean,
+      ): number => {
         const seg = findSegmentAt(segs, valueIndex);
         if (!seg) {
           // A range end exactly at the mapped value boundary.
@@ -371,14 +411,32 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
           );
         }
         if (seg.kind !== 'literal') {
-          return atEnd ? seg.sourceEnd : seg.sourceStart;
+          return pastUnit ? seg.sourceEnd : seg.sourceStart;
         }
-        // Literal: 1:1 UTF-16 mapping.
-        return seg.sourceStart + (valueIndex - seg.valueStart);
+        // Literal: 1:1 UTF-16 mapping. `units` counts value units from the
+        // segment's own start; `pastUnit` makes it count one extra (the offset
+        // just *after* the unit), so a range ending at `valueEnd` maps to
+        // `sourceStart + (valueEnd - seg.valueStart)`.
+        const units = (pastUnit ? valueIndex + 1 : valueIndex) - seg.valueStart;
+        return seg.sourceStart + units;
       };
 
+      // An empty range [i, i) is only meaningful at a literal boundary. Inside
+      // an atomic (escape / character-reference / normalization) segment there
+      // is no accurate source boundary to return, so it throws.
+      if (valueStart === valueEnd) {
+        const seg = findSegmentAt(segs, valueStart);
+        if (seg && seg.kind !== 'literal') {
+          throw new RangeError(
+            'getSourceRange: empty range falls inside an atomic construct '
+              + '(escape / character reference / normalization) where no '
+              + 'accurate source boundary exists',
+          );
+        }
+      }
+
       const startOffset = sourceOffsetAt(valueStart, false);
-      const endOffset = sourceOffsetAt(valueEnd, true);
+      const endOffset = sourceOffsetAt(valueEnd === 0 ? 0 : valueEnd - 1, true);
       return {
         start: pointAtOffset(lineStarts, md, startOffset),
         end: pointAtOffset(lineStarts, md, endOffset),

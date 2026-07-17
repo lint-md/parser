@@ -66,7 +66,7 @@ const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B');
 const textNode = ast.children[0].children[0]; // text value "A&B"
 // 把 value 中第 1 个字符（解码后的 '&'）映射回原始 Markdown 的 '&amp;' 区间
 const range = sourceMap.getSourceRange(textNode, 1, 2);
-// range.start.offset === 2, range.end.offset === 5
+// range.start.offset === 1, range.end.offset === 6
 
 // 取回该 text 节点对应的原始 Markdown 子串
 sourceMap.getRaw(textNode); // 'A&amp;B'

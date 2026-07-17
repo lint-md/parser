@@ -294,23 +294,73 @@ describe('parseMdWithSourceMap: contract', () => {
     expect(range.end.offset).toBe(2);
   });
 
-  test('illegal numeric reference maps atomically and keeps raw span', () => {
+  test('illegal numeric reference maps atomically and keeps full raw span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&#0;');
     const t = textNodes(ast)[0];
     const range = sourceMap.getSourceRange(t, 0, 1);
     expect(range.start.offset).toBe(0);
     expect(range.end.offset).toBe(4);
-    // getRaw reflects the AST node's own position (which the parser ends
-    // before the ';' for a replacement character).
-    expect(sourceMap.getRaw(t)).toBe('&#0');
+    // getRaw on a text node uses the recorded outer-token span, so it returns
+    // the complete raw source including the trailing ';'.
+    expect(sourceMap.getRaw(t)).toBe('&#0;');
   });
 
-  test('zero-length range resolves to a point', () => {
+  test('zero-length range resolves to a point at a literal boundary', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('ab');
     const t = textNodes(ast)[0];
     const range = sourceMap.getSourceRange(t, 1, 1);
     expect(range.start.offset).toBe(range.end.offset);
     expect(range.start.offset).toBe(1);
+  });
+
+  test('zero-length range inside an atomic construct throws', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('&amp;&copy;');
+    const t = textNodes(ast)[0];
+    expect(() => sourceMap.getSourceRange(t, 0, 0)).toThrow(RangeError);
+    expect(() => sourceMap.getSourceRange(t, 5, 5)).toThrow(RangeError);
+  });
+
+  test('valueEnd does not swallow the following entity/escape (P1)', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B');
+    const t = textNodes(ast)[0];
+    // 'A&amp;B' decodes to 'A&B'; the range [0, 1) is only the literal 'A'.
+    const r = sourceMap.getSourceRange(t, 0, 1);
+    expect(r.start.offset).toBe(0);
+    expect(r.end.offset).toBe(1);
+    // [1, 2) is the whole '&amp;' atomic construct.
+    const r2 = sourceMap.getSourceRange(t, 1, 2);
+    expect(r2.start.offset).toBe(1);
+    expect(r2.end.offset).toBe(6);
+  });
+
+  test('adjacent entities: first range does not include the second (P1)', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('&amp;&copy;');
+    const t = textNodes(ast)[0];
+    const r = sourceMap.getSourceRange(t, 0, 1);
+    expect(r.start.offset).toBe(0);
+    expect(r.end.offset).toBe(5);
+  });
+
+  test('getRaw rejects a foreign node from another document (P2)', () => {
+    const first = parseMdWithSourceMap('AAAA');
+    const second = parseMdWithSourceMap('BBBB');
+    expect(() => first.sourceMap.getRaw(second.ast.children[0])).toThrow(
+      RangeError,
+    );
+    expect(() =>
+      first.sourceMap.getSourceRange(
+        second.ast.children[0].children[0],
+        0,
+        1,
+      ),
+    ).toThrow(RangeError);
+  });
+
+  test('getSourceRange rejects non-integer indices (P4)', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('ab');
+    const t = textNodes(ast)[0];
+    expect(() => sourceMap.getSourceRange(t, 0.5, 1)).toThrow(RangeError);
+    expect(() => sourceMap.getSourceRange(t, 0, Infinity)).toThrow(RangeError);
   });
 
   test('AST is deeply identical to parseMd', () => {
@@ -331,6 +381,65 @@ describe('parseMdWithSourceMap: contract', () => {
       expect(JSON.parse(JSON.stringify(ast))).toEqual(
         JSON.parse(JSON.stringify(baseline)),
       );
+    }
+  });
+});
+
+
+describe('parseMd vs parseMdWithSourceMap: AST parity corpus', () => {
+  const { parseMd } = require('./helpers');
+
+  // A varied corpus exercising tokenizers / mdast decisions that the recording
+  // extension must not disturb: entities, escapes, autolinks, GFM (tables,
+  // strikethrough, task lists), directives, math, frontmatter, and mixed
+  // line endings / astral Unicode.
+  const corpus = [
+    'A&amp;B',
+    '&amp;&copy;',
+    'A &amp; B with *em* and [link](https://x.com?a&amp;b).',
+    String.raw`\*not emphasis\* and \`code\``,
+    'www.example.com and <https://x.com> and <a@b.com>',
+    '| a | b |\n| :- | -: |\n| 1 | 2 |',
+    '~~struck~~ and a ~~b',
+    '- [ ] todo\n- [x] done',
+    '::name\ncontent\n::',
+    'a\nb\r\nc\r\nd',
+    'a\u{1F389}b\u{1D11E}c',
+    '$$x^2$$ and `inline code`',
+    '---\ntitle: x\n---\n# Heading',
+    '> quote with &amp; entity\n> second line',
+    '1. one &amp; two\n2. three',
+    '`code with &lt; tag` and > quote',
+    'text [a](<b &amp; c>) end',
+    'pre\n```js\nconst x = 1 &amp; 2;\n```\npost',
+    '&#0;&#128;&#xFDD0; and &amp;amp;',
+    'A&#x1F600;B',
+  ];
+
+  test.each(corpus)('parity for: %p', (md) => {
+    const { ast } = parseMdWithSourceMap(md);
+    const baseline = parseMd(md);
+    expect(JSON.parse(JSON.stringify(ast))).toEqual(
+      JSON.parse(JSON.stringify(baseline)),
+    );
+  });
+
+  test('every mapped literal text node is contained in the source', () => {
+    const { parseMd } = require('./helpers');
+    for (const md of corpus) {
+      const { ast, sourceMap } = parseMdWithSourceMap(md);
+      const collect = (node: any, out: string[]) => {
+        if (node.type === 'text' && !/[&\\]/.test(node.value)) {
+          out.push(sourceMap.getRaw(node));
+        }
+        for (const c of node.children || []) collect(c, out);
+      };
+      const raws: string[] = [];
+      collect(ast, raws);
+      for (const raw of raws) {
+        expect(md).toContain(raw);
+      }
+      expect(() => parseMd(md)).not.toThrow();
     }
   });
 });
