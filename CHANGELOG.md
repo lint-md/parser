@@ -13,6 +13,13 @@
 
 - 新增 `__tests__/source-map.spec.ts`，覆盖转义、命名 / 十进制 / 十六进制字符引用、双 UTF-16 code unit 解码、autolink 字面量、`&#0;` / `&#128;` / `&#xFDD0;` 等非法码点、CRLF 与多行、连续片段、以及 `getRaw` / `getSourceRange` 的越界与外来节点契约
 
+### Fixed
+
+- `getSourceRange` 将转义 / 字符引用 / 非法码点归一化视为**不可拆分原子**：任何与其相交的 value range 都返回该 segment 的完整 source range，避免自动修复只替换实体的一半；仅 `literal` 段支持逐 code unit 边界
+- `pointAtOffset` 改为复用与 micromark 一致的换行与列约定（CRLF / CR / LF 均结束一行，列按 UTF-16 code unit 计数），修复 `a\rb`、astral Unicode 等场景的 `line` / `column` 错误
+- `getRaw(node)` 改用节点自身的 `position` 从原文切片，对任意带 position 的 AST 节点（root、paragraph 等）都有效，不再仅限被记录的 text 节点
+- 非法码点（如 `&#0;` / `&#128;` / `&#xFDD0;`）正确记录为 `normalization` kind，而非 `character-reference`
+
 ## 0.1.2
 
 ### Added

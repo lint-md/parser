@@ -8,7 +8,13 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-character-reference';
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
 import type { Root } from 'mdast';
-import type { MarkdownNode, MarkdownTextNode, ParsedPoint, ParsedPosition, PositionedMarkdownRoot } from '../types';
+import type {
+  MarkdownNode,
+  MarkdownTextNode,
+  ParsedPoint,
+  ParsedPosition,
+  PositionedMarkdownRoot,
+} from '../types';
 import type {
   MarkdownSourceMap,
   MarkdownSourceMapSegment,
@@ -53,6 +59,8 @@ interface RecordingState {
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
 }
 
+const REPLACEMENT_CHARACTER = '�';
+
 const point = (d: { line: number; column: number; offset: number }): ParsedPoint => ({
   line: d.line,
   column: d.column,
@@ -61,7 +69,6 @@ const point = (d: { line: number; column: number; offset: number }): ParsedPoint
 
 const createText = () => ({ type: 'text', value: '' });
 
-// Type aliases for the compile-context shape we touch.
 interface CompileContext {
   stack: Array<any>
   config: { canContainEols: string[] }
@@ -127,16 +134,21 @@ function recordingExtension(state: RecordingState) {
     const data = this.sliceSerialize(token);
     const type = this.getData('characterReferenceType') as string | undefined;
     let value: string;
+    let kind: MarkdownSourceMapSegment['kind'];
     if (type) {
       value = decodeNumericCharacterReference(
         data,
         type === 'characterReferenceMarkerNumeric' ? 10 : 16,
       );
       this.setData('characterReferenceType');
+      // Illegal / null / noncharacter numeric references are normalized by the
+      // parser to the Unicode replacement character rather than decoded.
+      kind = value === REPLACEMENT_CHARACTER ? 'normalization' : 'character-reference';
     }
     else {
       const decoded = decodeNamedCharacterReference(data);
       value = decoded === false ? data : decoded;
+      kind = 'character-reference';
     }
     const tail = this.stack.pop();
     tail.value += value;
@@ -148,7 +160,7 @@ function recordingExtension(state: RecordingState) {
         valueEnd: state.len + value.length,
         sourceStart: state.activeStart,
         sourceEnd: state.activeEnd,
-        kind: 'character-reference',
+        kind,
       });
       state.len += value.length;
     }
@@ -212,6 +224,72 @@ function recordingExtension(state: RecordingState) {
 }
 
 /**
+ * Offsets (UTF-16 code units) of the first code unit of every line in `md`.
+ * Handles LF, CR, and CRLF line endings the same way micromark does.
+ */
+function computeLineStarts(md: string): number[] {
+  const starts = [0];
+  let i = 0;
+  while (i < md.length) {
+    const ch = md.charCodeAt(i);
+    if (ch === 10 /* \n */) {
+      starts.push(i + 1);
+      i += 1;
+    }
+    else if (ch === 13 /* \r */) {
+      if (md.charCodeAt(i + 1) === 10 /* \n */) {
+        starts.push(i + 2);
+        i += 2;
+      }
+      else {
+        starts.push(i + 1);
+        i += 1;
+      }
+    }
+    else {
+      i += 1;
+    }
+  }
+  return starts;
+}
+
+/**
+ * Build a {@link ParsedPoint} from an absolute UTF-16 code-unit `offset` into
+ * `md`, using the same line/column convention as micromark (columns count
+ * UTF-16 code units, CRLF/CR/LF all end a line).
+ */
+function pointAtOffset(lineStarts: number[], md: string, offset: number): ParsedPoint {
+  // Find the last line whose start is <= offset.
+  let lo = 0;
+  let hi = lineStarts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (lineStarts[mid] <= offset)
+      lo = mid;
+    else hi = mid - 1;
+  }
+  const lineStart = lineStarts[lo];
+  return {
+    line: lo + 1,
+    column: offset - lineStart + 1,
+    offset,
+  };
+}
+
+/** Find the segment covering `valueIndex`, or undefined. */
+function findSegmentAt(
+  segs: MarkdownSourceMapSegment[],
+  valueIndex: number,
+): MarkdownSourceMapSegment | undefined {
+  for (const seg of segs) {
+    if (valueIndex >= seg.valueStart && valueIndex < seg.valueEnd) {
+      return seg;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Parse Markdown and additionally produce a sidecar source map that resolves
  * each `text` node's normalized `value` back to the raw Markdown source.
  *
@@ -243,20 +321,18 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   }) as unknown as Root;
 
   const ast = tree as unknown as PositionedMarkdownRoot;
+  const lineStarts = computeLineStarts(md);
 
   const sourceMap: MarkdownSourceMap = {
     getRaw(node: MarkdownNode): string {
-      const segs = state.segments.get(node as object);
-      if (!segs) {
+      const position = (node as { position?: ParsedPosition }).position;
+      if (!position || !position.start || !position.end) {
         throw new RangeError(
-          'getRaw: the given node has no source mapping; it is either '
+          'getRaw: the given node has no source position; it is either '
             + 'not part of this document, or was synthesized without a source span',
         );
       }
-      if (segs.length === 0) {
-        return '';
-      }
-      return md.slice(segs[0].sourceStart, segs[segs.length - 1].sourceEnd);
+      return md.slice(position.start.offset, position.end.offset);
     },
 
     getSourceRange(
@@ -278,14 +354,15 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
             + `bounds for a text node of length ${node.value.length}`,
         );
       }
-      // Source offset for a given value index, interpolated within its
-      // segment. Literal segments are 1:1; decoded segments map proportionally
-      // so the result stays monotonic. A request at a segment boundary uses
-      // that boundary's source offset.
-      const sourceOffsetAt = (valueIndex: number): number => {
+
+      // Escapes / character references / normalizations are atomic: the parser
+      // produced them as a single unit, so any value range intersecting such a
+      // segment must map back to that segment's *complete* source span. Only
+      // `literal` segments support per-code-unit boundaries (they are 1:1).
+      const sourceOffsetAt = (valueIndex: number, atEnd: boolean): number => {
         const seg = findSegmentAt(segs, valueIndex);
         if (!seg) {
-          // Boundary exactly at the end of the mapped value.
+          // A range end exactly at the mapped value boundary.
           if (valueIndex === node.value.length && segs.length > 0) {
             return segs[segs.length - 1].sourceEnd;
           }
@@ -293,49 +370,21 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
             'getSourceRange: value range is not fully covered by the source map',
           );
         }
-        const valueLen = seg.valueEnd - seg.valueStart;
-        const sourceLen = seg.sourceEnd - seg.sourceStart;
-        if (valueLen === 0)
-          return seg.sourceStart;
-        const ratio = (valueIndex - seg.valueStart) / valueLen;
-        return seg.sourceStart + Math.round(ratio * sourceLen);
+        if (seg.kind !== 'literal') {
+          return atEnd ? seg.sourceEnd : seg.sourceStart;
+        }
+        // Literal: 1:1 UTF-16 mapping.
+        return seg.sourceStart + (valueIndex - seg.valueStart);
       };
 
-      const start = pointAtOffset(md, sourceOffsetAt(valueStart));
-      const end = pointAtOffset(md, sourceOffsetAt(valueEnd));
-      return { start, end };
+      const startOffset = sourceOffsetAt(valueStart, false);
+      const endOffset = sourceOffsetAt(valueEnd, true);
+      return {
+        start: pointAtOffset(lineStarts, md, startOffset),
+        end: pointAtOffset(lineStarts, md, endOffset),
+      };
     },
   };
 
   return { ast, sourceMap };
 };
-/** Find the segment covering `valueIndex`, or undefined. */
-function findSegmentAt(
-  segs: MarkdownSourceMapSegment[],
-  valueIndex: number,
-): MarkdownSourceMapSegment | undefined {
-  for (const seg of segs) {
-    if (valueIndex >= seg.valueStart && valueIndex < seg.valueEnd) {
-      return seg;
-    }
-  }
-  return undefined;
-}
-
-/** Compute a {@link ParsedPoint} from an absolute offset into `md`. */
-function pointAtOffset(md: string, offset: number): ParsedPoint {
-  // `offset` is a UTF-16 code-unit offset from the start of `md`.
-  const prefix = md.slice(0, offset);
-  let line = 1;
-  let column = 1;
-  for (const ch of prefix) {
-    if (ch === '\n') {
-      line += 1;
-      column = 1;
-    }
-    else {
-      column += 1;
-    }
-  }
-  return { line, column, offset };
-}

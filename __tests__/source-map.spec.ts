@@ -203,9 +203,19 @@ describe('parseMdWithSourceMap: contract', () => {
     expect(() => sourceMap.getSourceRange(t, 0, 99)).toThrow(RangeError);
   });
 
-  test('getRaw throws RangeError for a node with no mapping (root)', () => {
+  test('getRaw works for any positioned node (root, paragraph)', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('# Title\n\nBody text.');
+    // root covers the whole document
+    expect(sourceMap.getRaw(ast)).toBe('# Title\n\nBody text.');
+    // paragraph covers its own span
+    const para = ast.children[1];
+    expect(sourceMap.getRaw(para)).toBe('Body text.');
+  });
+
+  test('getRaw throws RangeError for a node without a source position', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('hello');
-    expect(() => sourceMap.getRaw(ast)).toThrow(RangeError);
+    const orphan = { type: 'text', value: 'x' } as any;
+    expect(() => sourceMap.getRaw(orphan)).toThrow(RangeError);
   });
 
   test('getSourceRange throws RangeError for a foreign node', () => {
@@ -216,6 +226,85 @@ describe('parseMdWithSourceMap: contract', () => {
     );
   });
 
+  test('atomic entity is not split: any intersecting value range maps to full source span', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('&Afr;');
+    const t = textNodes(ast)[0];
+    // '&Afr;' decodes to a surrogate pair (2 UTF-16 units); requesting either
+    // unit must return the complete '&#x27;' source span, never a half-entity.
+    expect(sourceMap.getSourceRange(t, 0, 1)).toEqual({
+      start: { line: 1, column: 1, offset: 0 },
+      end: { line: 1, column: 6, offset: 5 },
+    });
+    expect(sourceMap.getSourceRange(t, 1, 2)).toEqual({
+      start: { line: 1, column: 1, offset: 0 },
+      end: { line: 1, column: 6, offset: 5 },
+    });
+  });
+
+  test('escape is atomic: requesting the single decoded char returns full escape span', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('\\(');
+    const t = textNodes(ast)[0];
+    expect(sourceMap.getSourceRange(t, 0, 1)).toEqual({
+      start: { line: 1, column: 1, offset: 0 },
+      end: { line: 1, column: 3, offset: 2 },
+    });
+  });
+
+  test('literal segments still support per-code-unit boundaries', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('ab');
+    const t = textNodes(ast)[0];
+    expect(sourceMap.getSourceRange(t, 0, 1).end.offset).toBe(1);
+    expect(sourceMap.getSourceRange(t, 1, 2).start.offset).toBe(1);
+  });
+
+  test('CR-only line ending produces correct line/column', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('a\rb');
+    const t = textNodes(ast)[0];
+    const range = sourceMap.getSourceRange(t, 0, t.value.length);
+    // matches the parser's own text node end position.
+    expect(range.end).toEqual({ line: 2, column: 2, offset: 3 });
+  });
+
+  test('CRLF line ending produces correct line/column', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('a\r\nb');
+    const t = textNodes(ast)[0];
+    const range = sourceMap.getSourceRange(t, 0, t.value.length);
+    expect(range.start).toEqual({ line: 1, column: 1, offset: 0 });
+    expect(range.end).toEqual({ line: 2, column: 2, offset: 4 });
+  });
+
+  test('astral Unicode advances column by UTF-16 code units', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('a🎉b');
+    const t = textNodes(ast)[0];
+    const range = sourceMap.getSourceRange(t, 0, t.value.length);
+    // parser reports end { line: 1, column: 5, offset: 4 }.
+    expect(range.end).toEqual({ line: 1, column: 5, offset: 4 });
+    // a half-surrogate query inside a LITERAL astral run maps 1:1 (literal
+    // segments are not atomic), which matches the parser's own positions.
+    const half = sourceMap.getSourceRange(t, 1, 2);
+    expect(half.start.offset).toBe(1);
+    expect(half.end.offset).toBe(2);
+  });
+
+  test('half-surrogate range inside a literal astral run stays contiguous', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('🎉');
+    const t = textNodes(ast)[0];
+    const range = sourceMap.getSourceRange(t, 0, 2);
+    expect(range.start.offset).toBe(0);
+    expect(range.end.offset).toBe(2);
+  });
+
+  test('illegal numeric reference maps atomically and keeps raw span', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('&#0;');
+    const t = textNodes(ast)[0];
+    const range = sourceMap.getSourceRange(t, 0, 1);
+    expect(range.start.offset).toBe(0);
+    expect(range.end.offset).toBe(4);
+    // getRaw reflects the AST node's own position (which the parser ends
+    // before the ';' for a replacement character).
+    expect(sourceMap.getRaw(t)).toBe('&#0');
+  });
+
   test('zero-length range resolves to a point', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('ab');
     const t = textNodes(ast)[0];
@@ -224,13 +313,24 @@ describe('parseMdWithSourceMap: contract', () => {
     expect(range.start.offset).toBe(1);
   });
 
-  test('AST is identical in shape to parseMd', () => {
+  test('AST is deeply identical to parseMd', () => {
     const { parseMd } = require('./helpers');
     const md = 'A &amp; B with *em* and [link](https://x.com?a&amp;b).';
     const { ast } = parseMdWithSourceMap(md);
     const baseline = parseMd(md);
-    // Strip the source-map-only concerns: structural equality.
-    expect(ast.children).toHaveLength(baseline.children.length);
-    expect(ast.children[0].type).toBe('paragraph');
+    expect(JSON.parse(JSON.stringify(ast))).toEqual(
+      JSON.parse(JSON.stringify(baseline)),
+    );
+  });
+
+  test('AST is deeply identical to parseMd for CR / CRLF / astral input', () => {
+    const { parseMd } = require('./helpers');
+    for (const md of ['a\rb', 'a\r\nb', 'a🎉b', 'A&lt;B\nC&#128;D']) {
+      const { ast } = parseMdWithSourceMap(md);
+      const baseline = parseMd(md);
+      expect(JSON.parse(JSON.stringify(ast))).toEqual(
+        JSON.parse(JSON.stringify(baseline)),
+      );
+    }
   });
 });
