@@ -40,9 +40,12 @@ try {
       'utf8',
     ),
   );
-  assert.deepEqual(Object.keys(installedManifest.dependencies), [
+  assert.deepEqual(Object.keys(installedManifest.dependencies).sort(), [
     '@types/mdast',
-  ]);
+    'decode-named-character-reference',
+    'mdast-util-from-markdown',
+    'micromark-util-decode-numeric-character-reference',
+  ].sort());
 
   const cjsResult = run('node', [
     '-e',

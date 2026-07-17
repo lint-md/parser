@@ -1,5 +1,13 @@
 import parser = require('@lint-md/parser');
 
+const doc = parser.parseMdWithSourceMap('# CommonJS');
+const segKind: parser.MarkdownSourceMapSegment['kind'] = 'character-reference';
+const raw: string = doc.sourceMap.getRaw(doc.ast.children[0]);
+const range = doc.sourceMap.getSourceRange(doc.ast.children[0] as parser.MarkdownTextNode, 0, 1);
+void segKind;
+void raw;
+void range;
+
 const root = parser.parseMd('# CommonJS');
 
 const rootOffset: number = root.position.start.offset;

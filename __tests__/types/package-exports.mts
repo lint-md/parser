@@ -1,7 +1,10 @@
 import {
   parseMd,
+  parseMdWithSourceMap,
   revertMdAstNode,
   stringifyMdAst,
+  type MarkdownSourceMapSegment,
+  type ParsedMarkdownDocument,
   type PositionedMarkdownRoot,
   type PositionedMarkdownNode,
 } from '@lint-md/parser';

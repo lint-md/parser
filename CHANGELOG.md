@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.3
+
+### Added
+
+- 新增 `parseMdWithSourceMap(md)`，在解析同时产出 `text` 节点 `value` 到原始 Markdown 的源码映射（`MarkdownSourceMap`）
+- 新增公开类型 `ParsedMarkdownDocument`、`MarkdownSourceMap`、`MarkdownSourceMapSegment`、`SourceMapSegmentKind`
+- `MarkdownSourceMap.getRaw` / `getSourceRange` 提供"归一化 value → 原始 source 区间"的反查能力，autolink 内保持字面量的 `&amp;` 也正确映射
+- 新增依赖：`mdast-util-from-markdown`、`decode-named-character-reference`、`micromark-util-decode-numeric-character-reference`（与 remark 内部使用的版本一致，避免实体解码语义漂移）
+
+### Tests
+
+- 新增 `__tests__/source-map.spec.ts`，覆盖转义、命名 / 十进制 / 十六进制字符引用、双 UTF-16 code unit 解码、autolink 字面量、`&#0;` / `&#128;` / `&#xFDD0;` 等非法码点、CRLF 与多行、连续片段、以及 `getRaw` / `getSourceRange` 的越界与外来节点契约
+
 ## 0.1.2
 
 ### Added
