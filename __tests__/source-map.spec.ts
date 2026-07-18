@@ -534,6 +534,34 @@ describe('parseMdWithSourceMap: error lifecycle', () => {
     }
   });
 
+  test('rejects a text node added after parsing', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('hello');
+    const paragraph = ast.children[0] as any;
+
+    // A node pushed into the tree after parsing is not in the source map,
+    // even when it carries a position that looks legitimate. The map must
+    // not accept it just because a plausible position exists.
+    const generated = {
+      type: 'text',
+      value: 'generated',
+      position: {
+        start: { line: 1, column: 1, offset: 0 },
+        end: { line: 1, column: 6, offset: 5 },
+      },
+    };
+    paragraph.children.push(generated);
+
+    const rangeError = thrown(() =>
+      sourceMap.getSourceRange(generated, 0, generated.value.length),
+    );
+    expect(rangeError).toBeInstanceOf(SourceMapUnavailableError);
+    expect(rangeError.code).toBe('ERR_SOURCE_MAP_UNAVAILABLE');
+
+    const rawError = thrown(() => sourceMap.getRaw(generated));
+    expect(rawError).toBeInstanceOf(SourceMapUnavailableError);
+    expect(rawError.code).toBe('ERR_SOURCE_MAP_UNAVAILABLE');
+  });
+
   test('caller argument errors stay plain RangeError (not SourceMapError)', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('ab');
     const t = textNodes(ast)[0];

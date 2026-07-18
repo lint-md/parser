@@ -6,6 +6,7 @@ import {
   SourceMapError,
   SourceMapConsistencyError,
   SourceMapUnavailableError,
+  type SourceMapErrorCode,
   type MarkdownSourceMapSegment,
   type ParsedMarkdownDocument,
   type PositionedMarkdownRoot,
@@ -29,7 +30,7 @@ const segKind: MarkdownSourceMapSegment['kind'] = 'character-reference';
 const consistency = new SourceMapConsistencyError();
 const unavailable = new SourceMapUnavailableError();
 const asRangeError: RangeError = consistency;
-const code: string = unavailable.code;
+const code: SourceMapErrorCode = unavailable.code;
 const isSourceMapError: boolean = unavailable instanceof SourceMapError;
 
 void rootOffset;

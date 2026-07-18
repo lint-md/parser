@@ -7,7 +7,7 @@ const range = doc.sourceMap.getSourceRange(doc.ast.children[0] as parser.Markdow
 const consistency = new parser.SourceMapConsistencyError();
 const asRangeError: RangeError = new parser.SourceMapUnavailableError();
 const isSourceMapError: boolean = consistency instanceof parser.SourceMapError;
-const code: string = consistency.code;
+const code: parser.SourceMapErrorCode = consistency.code;
 void segKind;
 void raw;
 void range;

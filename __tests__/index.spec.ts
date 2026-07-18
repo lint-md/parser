@@ -12,59 +12,65 @@ describe('test lint-md-parser', () => {
     expect(typeof parseMd).toStrictEqual('function');
   });
 
-  test.each([
+  test.each<[string, string[], string]>([
     [
-      'CommonJS',
+      'CJS parseMd',
       [
         '-e',
         "const parser = require('@lint-md/parser'); process.stdout.write(parser.parseMd('# test').type)",
       ],
+      'root',
     ],
     [
-      'ESM',
+      'ESM parseMd',
       [
         '--input-type=module',
         '-e',
         "import { parseMd } from '@lint-md/parser'; process.stdout.write(parseMd('# test').type)",
       ],
+      'root',
     ],
     [
-      'CommonJS',
+      'CJS parseMdWithSourceMap',
       [
         '-e',
         "const parser = require('@lint-md/parser'); process.stdout.write(parser.parseMdWithSourceMap('# test').ast.type)",
       ],
+      'root',
     ],
     [
-      'ESM',
+      'ESM parseMdWithSourceMap',
       [
         '--input-type=module',
         '-e',
         "import { parseMdWithSourceMap } from '@lint-md/parser'; process.stdout.write(parseMdWithSourceMap('# test').ast.type)",
       ],
+      'root',
     ],
     [
-      'CommonJS',
+      'CJS consistency error',
       [
         '-e',
         "const parser = require('@lint-md/parser'); process.stdout.write(String(new parser.SourceMapConsistencyError() instanceof RangeError))",
       ],
+      'true',
     ],
     [
-      'ESM',
+      'ESM consistency error',
       [
         '--input-type=module',
         '-e',
         "import { SourceMapConsistencyError } from '@lint-md/parser'; process.stdout.write(String(new SourceMapConsistencyError() instanceof RangeError))",
       ],
+      'true',
     ],
-  ])('loads the %s package export', (_name, args) => {
+  ])('loads %s', (_name, args, expected) => {
     const output = execFileSync(process.execPath, args as string[], {
       cwd: path.resolve(__dirname, '..'),
       encoding: 'utf8',
     });
 
-    expect(['root', 'true']).toContain(output);
+    expect(output).toBe(expected);
   });
 
   test('stringifyMdAst is same function as revertMdAstNode (CJS)', () => {

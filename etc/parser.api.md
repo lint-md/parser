@@ -154,9 +154,12 @@ export class SourceMapConsistencyError extends SourceMapError {
 
 // @public
 export class SourceMapError extends RangeError {
-    constructor(code: string, message: string);
-    readonly code: string;
+    constructor(code: SourceMapErrorCode, message: string);
+    readonly code: SourceMapErrorCode;
 }
+
+// @public
+export type SourceMapErrorCode = 'ERR_SOURCE_MAP_CONSISTENCY' | 'ERR_SOURCE_MAP_UNAVAILABLE';
 
 // @public
 export type SourceMapSegmentKind = 'literal' | 'escape' | 'character-reference' | 'normalization' | 'generated';

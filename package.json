@@ -40,7 +40,7 @@
   "scripts": {
     "watch": "tsc -w",
     "build": "rm -rf dist && pnpm run build:dist && pnpm run build:ts-declaration",
-    "build:dist": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/lint-md-parser.cjs --minify --keep-names && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser.mjs --minify --keep-names",
+    "build:dist": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/lint-md-parser.cjs --minify && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser.mjs --minify",
     "build:ts-declaration": "tsc && api-extractor run --local --verbose && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.mts && for f in dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts dist/lint-md-parser.d.mts; do cat scripts/mdast-augment.d.ts >> \"$f\"; done",
     "lint": "eslint --ext js,jsx,ts,tsx ./src",
     "test": "jest && pnpm run test:types && pnpm run test:package",

@@ -4,6 +4,7 @@ export {
   SourceMapError,
   SourceMapConsistencyError,
   SourceMapUnavailableError,
+  type SourceMapErrorCode,
 } from './source-map/errors';
 
 export * from './types';

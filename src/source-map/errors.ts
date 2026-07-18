@@ -1,31 +1,31 @@
 /**
+ * Stable machine-readable codes carried by {@link SourceMapError} variants.
+ *
+ * @public
+ */
+export type SourceMapErrorCode =
+  | 'ERR_SOURCE_MAP_CONSISTENCY'
+  | 'ERR_SOURCE_MAP_UNAVAILABLE';
+
+/**
  * Base class for errors thrown by {@link MarkdownSourceMap} lookups.
  *
  * Extends `RangeError` so existing `catch (RangeError)` handling keeps
- * working, and adds a stable {@link SourceMapError.code} so downstream
- * consumers can pick a recovery strategy even when `instanceof` is
- * unreliable — e.g. dual CJS/ESM package instances, duplicate installs, or
- * errors crossing a worker / serialization boundary:
- *
- * ```ts
- * if (
- *   error instanceof SourceMapConsistencyError
- *   || (error instanceof Error
- *     && (error as { code?: string }).code === 'ERR_SOURCE_MAP_CONSISTENCY')
- * ) {
- *   // recovery strategy
- * }
- * ```
+ * working, and adds a stable `code` so downstream consumers can pick a
+ * recovery strategy even when `instanceof` is unreliable — e.g. dual
+ * CJS/ESM package instances or duplicate installs. The error `name` is set
+ * explicitly per class rather than relied upon from `new.target`, so the
+ * public names stay stable under any bundler minification.
  *
  * @public
  */
 export class SourceMapError extends RangeError {
   /** Stable machine-readable error code. */
-  readonly code: string;
+  readonly code: SourceMapErrorCode;
 
-  constructor(code: string, message: string) {
+  constructor(code: SourceMapErrorCode, message: string) {
     super(message);
-    this.name = new.target.name;
+    this.name = 'SourceMapError';
     this.code = code;
   }
 }
@@ -42,6 +42,7 @@ export class SourceMapError extends RangeError {
 export class SourceMapConsistencyError extends SourceMapError {
   constructor(message = 'The mapped node has changed since parsing') {
     super('ERR_SOURCE_MAP_CONSISTENCY', message);
+    this.name = 'SourceMapConsistencyError';
   }
 }
 
@@ -58,5 +59,6 @@ export class SourceMapConsistencyError extends SourceMapError {
 export class SourceMapUnavailableError extends SourceMapError {
   constructor(message = 'No source mapping is available for this node') {
     super('ERR_SOURCE_MAP_UNAVAILABLE', message);
+    this.name = 'SourceMapUnavailableError';
   }
 }
