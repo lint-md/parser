@@ -559,6 +559,36 @@ describe('parseMdWithSourceMap: URL fields → raw source', () => {
     expect(md.slice(range.start.offset, range.end.offset)).toBe('/url');
   });
 
+  test('does not confuse a resource-like sequence inside raw HTML', () => {
+    const md = '[<span title="](same)">x</span>](same)';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'link')[0];
+    expect(node.url).toBe('same');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
+    expect(range.start.offset).toBe(md.lastIndexOf('(same)') + 1);
+  });
+
+  test('does not confuse a nested image destination with the outer link', () => {
+    const md = '[![x](<a](same)b>)](same)';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'link')[0];
+    expect(node.url).toBe('same');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
+    expect(range.start.offset).toBe(md.lastIndexOf('(same)') + 1);
+  });
+
+  test.each([
+    ['link', '> [x](\n> \\>\n> )'],
+    ['definition', '> [x]:\n> \\>'],
+  ])('excludes blockquote markers from a cross-line %s URL', (type, md) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, type)[0];
+    expect(node.url).toBe('>');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, 1);
+    expect(range.start.offset).toBe(md.lastIndexOf('\\>'));
+    expect(md.slice(range.start.offset, range.end.offset)).toBe('\\>');
+  });
+
   test('rejects a link URL modified after parsing', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('[x](/old)');
     const node = nodesOfType(ast, 'link')[0];

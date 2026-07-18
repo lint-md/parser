@@ -55,6 +55,8 @@ interface RecordingState {
   urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** link / definition node -> source point for an empty URL. */
   emptyUrlOffsets: WeakMap<object, number>
+  /** link / definition node -> parser-confirmed destination content span. */
+  urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -73,6 +75,8 @@ interface CompileContext {
   getData: (key: string) => unknown
   setData: (key: string, value?: unknown) => void
   sliceSerialize: (token: any) => string
+  buffer: () => void
+  resume: () => string
 }
 
 /**
@@ -87,7 +91,9 @@ interface CompileContext {
  *
  * - token event handler names (enter/exit): `data`, `characterEscape` /
  *   `characterEscapeValue`, `characterReference` / `characterReferenceValue`,
- *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`.
+ *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`,
+ *   `resourceDestinationString`, `definitionDestinationString`, their literal
+ *   wrappers, and `resource`.
  * - compile-context fields on `this` ({@link CompileContext}): `stack` (the AST
  *   build stack), `config.canContainEols` (whether a line ending is merged into
  *   text), `getData` / `setData` for the keys `characterReferenceType`,
@@ -219,6 +225,55 @@ function recordingExtension(state: RecordingState) {
     node.url = `mailto:${this.sliceSerialize(token)}`;
   };
 
+  const onenterUrlDestination = function (this: CompileContext) {
+    this.buffer();
+  };
+
+  const onexitUrlDestination = function (this: CompileContext, token: any) {
+    const url = this.resume();
+    const node = this.stack[this.stack.length - 1];
+    node.url = url;
+    if (node.type === 'link' || node.type === 'definition') {
+      state.urlSourceSpans.set(node, {
+        start: token.start.offset,
+        end: token.end.offset,
+      });
+    }
+  };
+
+  const onexitDestinationLiteral = function (this: CompileContext, token: any) {
+    const node = this.stack[this.stack.length - 1];
+    if (
+      (node.type === 'link' || node.type === 'definition')
+      && node.url === ''
+      && !state.urlSourceSpans.has(node)
+    ) {
+      state.urlSourceSpans.set(node, {
+        start: token.start.offset + 1,
+        end: token.end.offset - 1,
+      });
+    }
+  };
+
+  // The parser emits no destination token for `[label]()`. The confirmed
+  // resource token still gives us the accurate point immediately before its
+  // closing `)`. Preserve the standard handler's `inReference` cleanup too.
+  const onexitresource = function (this: CompileContext, token: any) {
+    this.setData('inReference');
+    const node = this.stack[this.stack.length - 1];
+    if (
+      node.type === 'link'
+      && node.url === ''
+      && !state.urlSourceSpans.has(node)
+    ) {
+      const emptyOffset = token.end.offset - 1;
+      state.urlSourceSpans.set(node, {
+        start: emptyOffset,
+        end: emptyOffset,
+      });
+    }
+  };
+
   return {
     enter: {
       data: onenterdata,
@@ -226,6 +281,8 @@ function recordingExtension(state: RecordingState) {
       characterReference: onenterConstruct,
       autolinkProtocol: onenterdata,
       autolinkEmail: onenterdata,
+      definitionDestinationString: onenterUrlDestination,
+      resourceDestinationString: onenterUrlDestination,
     },
     exit: {
       data(this: CompileContext, token: any) {
@@ -241,6 +298,11 @@ function recordingExtension(state: RecordingState) {
       lineEnding: onexitlineending,
       autolinkProtocol: onexitautolinkprotocol,
       autolinkEmail: onexitautolinkemail,
+      definitionDestinationString: onexitUrlDestination,
+      definitionDestinationLiteral: onexitDestinationLiteral,
+      resourceDestinationString: onexitUrlDestination,
+      resourceDestinationLiteral: onexitDestinationLiteral,
+      resource: onexitresource,
     },
   };
 }
@@ -394,107 +456,6 @@ function isEscapableUrlCharacter(char: number): boolean {
     || (char >= 123 && char <= 126);
 }
 
-function skipUrlWhitespace(md: string, offset: number, end: number): number {
-  while (offset < end) {
-    const char = md.charCodeAt(offset);
-    if (char !== 32 && char !== 9 && char !== 10 && char !== 13)
-      break;
-    offset++;
-  }
-  return offset;
-}
-
-function labelEnd(md: string, start: number, end: number): number | undefined {
-  if (md.charCodeAt(start) !== 91)
-    return undefined;
-  let depth = 0;
-  for (let offset = start; offset < end; offset++) {
-    const char = md.charCodeAt(offset);
-    if (char === 92) {
-      offset++;
-      continue;
-    }
-    // A `]` inside a code span is label text, not the end of the label.
-    if (char === 96) {
-      let runEnd = offset;
-      while (md.charCodeAt(runEnd) === 96) runEnd++;
-      const run = md.slice(offset, runEnd);
-      const close = md.indexOf(run, runEnd);
-      if (close >= 0 && close < end) {
-        offset = close + run.length - 1;
-        continue;
-      }
-    }
-    if (char === 91)
-      depth++;
-    else if (char === 93 && --depth === 0)
-      return offset;
-  }
-  return undefined;
-}
-
-function urlDestinationBounds(
-  md: string,
-  node: { type: string; position?: ParsedPosition },
-): SourceSpan | undefined {
-  const position = node.position;
-  if (!position)
-    return undefined;
-  const start = position.start.offset;
-  const end = position.end.offset;
-  let offset: number;
-
-  if (node.type === 'link') {
-    const endOfLabel = labelEnd(md, start, end);
-    if (endOfLabel === undefined || md.charCodeAt(endOfLabel + 1) !== 40)
-      return undefined;
-    offset = skipUrlWhitespace(md, endOfLabel + 2, end);
-  }
-  else if (node.type === 'definition') {
-    const endOfLabel = labelEnd(md, start, end);
-    if (endOfLabel === undefined || md.charCodeAt(endOfLabel + 1) !== 58)
-      return undefined;
-    offset = skipUrlWhitespace(md, endOfLabel + 2, end);
-  }
-  else {
-    return undefined;
-  }
-
-  if (offset >= end)
-    return { start: offset, end: offset };
-  if (md.charCodeAt(offset) === 60) {
-    const destinationStart = ++offset;
-    while (offset < end && md.charCodeAt(offset) !== 62) {
-      if (md.charCodeAt(offset) === 92)
-        offset++;
-      offset++;
-    }
-    return offset < end ? { start: destinationStart, end: offset } : undefined;
-  }
-
-  const destinationStart = offset;
-  let parentheses = 0;
-  while (offset < end) {
-    const char = md.charCodeAt(offset);
-    if (char === 92) {
-      offset += 2;
-      continue;
-    }
-    if (char === 40)
-      parentheses++;
-    else if (char === 41) {
-      if (parentheses === 0)
-        break;
-      parentheses--;
-    }
-    else if (char === 32 || char === 9 || char === 10 || char === 13) {
-      break;
-    }
-    offset++;
-  }
-  return { start: destinationStart, end: offset };
-}
-
 interface UrlSegments {
   segments: MarkdownSourceMapSegment[]
   emptyOffset?: number
@@ -502,11 +463,9 @@ interface UrlSegments {
 
 function buildUrlSegments(
   md: string,
-  node: { type: string; url: string; position?: ParsedPosition },
+  node: { url: string },
+  bounds: SourceSpan,
 ): UrlSegments | undefined {
-  const bounds = urlDestinationBounds(md, node);
-  if (!bounds)
-    return undefined;
   if (bounds.start === bounds.end) {
     return node.url === ''
       ? { segments: [], emptyOffset: bounds.start }
@@ -944,6 +903,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     emptyCodeOffsets: new WeakMap(),
     urlSegments: new WeakMap(),
     emptyUrlOffsets: new WeakMap(),
+    urlSourceSpans: new WeakMap(),
   };
 
   const tree = fromMarkdown(md, {
@@ -987,7 +947,8 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       (node.type === 'link' || node.type === 'definition')
       && typeof node.url === 'string'
     ) {
-      const segments = buildUrlSegments(md, node);
+      const bounds = state.urlSourceSpans.get(node);
+      const segments = bounds ? buildUrlSegments(md, node, bounds) : undefined;
       if (segments) {
         state.urlSegments.set(node, segments.segments);
         if (segments.emptyOffset !== undefined)
