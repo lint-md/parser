@@ -11,7 +11,7 @@
 
 ### Tests
 
-- 新增 `__tests__/source-map.spec.ts`，覆盖转义、命名 / 十进制 / 十六进制字符引用、双 UTF-16 code unit 解码、autolink 字面量、`&#0;` / `&#128;` / `&#xFDD0;` 等非法码点、CRLF 与多行、连续片段、以及 `getRaw` / `getSourceRange` 的越界与外来节点契约
+- 新增 `__tests__/source-map.spec.ts`，覆盖转义、命名 / 十进制 / 十六进制字符引用、双 UTF-16 code unit 解码、autolink 字面量、`&#0;` / `&#128;` / `&#xFDD0;` 等非法码点、CRLF 与多行、连续片段、插件拆分（www / email autolink 前后的兄弟 text 节点）与无法归因节点的 `RangeError` 契约，以及 `getRaw` / `getSourceRange` 的越界与外来节点契约
 
 ### Fixed
 
