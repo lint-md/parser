@@ -1,12 +1,12 @@
 import { parseMd, parseMdWithSourceMap } from './helpers';
 
 // These tests exercise the built package purely through its public API.
-// Internal-structure assertions (that each processor holds an independent,
+// Internal-structure assertions — that each processor holds an independent,
 // emptied autolink-extension clone and that the shared singleton is never
-// mutated) live in index.spec.ts, which runs the bundled artifact against the
-// real ESM `mdast-util-gfm-autolink-literal` in child processes — the only
-// place those objects are reachable, since the ESM-only dependency and the
-// internal `createParserProcessor` cannot be imported under ts-jest (CJS).
+// mutated — live in parser-isolation-bundle.spec.ts, which builds the parser
+// with its dependencies kept EXTERNAL so the artifact and the test resolve to
+// the same `mdast-util-gfm-autolink-literal` object. (The ESM-only dependency
+// and the internal createParserProcessor cannot be imported under ts-jest CJS.)
 
 function allNodes(root: any): any[] {
   const out: any[] = [];
@@ -34,20 +34,43 @@ describe('parser isolation: default behavior compatibility', () => {
     expect(first.value).toContain('www.google.com');
   });
 
-  test('GFM tables, task lists, strikethrough, refs/escapes, frontmatter, directives, math parse', () => {
-    const corpus = [
-      '| a | b |\n|---|---|\n| 1 | 2 |',
-      '- [x] done\n- [ ] todo',
-      '~~struck~~',
-      'a &amp; b \\( c',
-      '---\ntitle: x\n---\n',
-      ':::note\nhello\n:::\n',
-      'inline $a+b$ and $$\nx=1\n$$',
-    ];
-    for (const md of corpus) {
-      expect(() => parseMd(md)).not.toThrow();
-      expect(parseMd(md).type).toBe('root');
-    }
+  test('GFM table produces a table node', () => {
+    expect(parseMd('| a | b |\n|---|---|\n| 1 | 2 |').children[0].type).toBe(
+      'table',
+    );
+  });
+
+  test('GFM task list produces list items with checked state', () => {
+    const list: any = parseMd('- [x] done\n- [ ] todo').children[0];
+    expect(list.type).toBe('list');
+    expect(list.children[0].checked).toBe(true);
+    expect(list.children[1].checked).toBe(false);
+  });
+
+  test('GFM strikethrough produces a delete node', () => {
+    expect(parseMd('~~struck~~').children[0].children[0].type).toBe('delete');
+  });
+
+  test('character reference and escape are normalized in the text value', () => {
+    const text: any = parseMd('a &amp; b \\( c').children[0].children[0];
+    expect(text.type).toBe('text');
+    expect(text.value).toBe('a & b ( c');
+  });
+
+  test('YAML frontmatter produces a yaml node', () => {
+    expect(parseMd('---\ntitle: x\n---\n').children[0].type).toBe('yaml');
+  });
+
+  test('directive produces a containerDirective node', () => {
+    expect(parseMd(':::note\nhello\n:::\n').children[0].type).toBe(
+      'containerDirective',
+    );
+  });
+
+  test('math produces inlineMath and math nodes', () => {
+    const inline: any = parseMd('inline $a+b$').children[0];
+    expect(inline.children.some((n: any) => n.type === 'inlineMath')).toBe(true);
+    expect(parseMd('$$\nx=1\n$$').children[0].type).toBe('math');
   });
 });
 
