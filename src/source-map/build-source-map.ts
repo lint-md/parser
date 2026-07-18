@@ -715,33 +715,40 @@ function buildFencedCodeSegments(
   const openingIndent = fencedIndentation(md, physicalLineStart, start, quoteDepth);
   if (openingIndent < 0)
     return undefined;
-  const openingLineEnd = lineEnd(md, start, end);
+  // A blockquote code node can end before its final physical line ending, so
+  // derive the opening line boundary from the complete Markdown rather than
+  // the node's position span. This keeps an unclosed empty fence's insertion
+  // point at the actual EOF.
+  const openingLineEnd = lineEnd(md, start, md.length);
   let contentEnd = end;
   let hasClosingFence = false;
   const closingLineStart = lineStart(md, start, end);
-  const closingStart = quoteDepth === 0
-    ? closingLineStart
-    : skipBlockQuoteMarkers(md, closingLineStart, end, quoteDepth);
-  if (closingStart === undefined)
-    return undefined;
-  let closingFenceStart = closingStart;
-  let removedIndentation = 0;
-  while (
-    removedIndentation < openingIndent
-    && md.charCodeAt(closingFenceStart) === 32
-  ) {
-    closingFenceStart++;
-    removedIndentation++;
-  }
-  const closing = md.slice(closingFenceStart, end);
-  const closingMatch = /^( {0,3})(`+|~+)[ \t]*$/.exec(closing);
-  if (
-    closingMatch
-    && closingMatch[2].charCodeAt(0) === marker
-    && closingMatch[2].length >= fenceLength
-  ) {
-    contentEnd = closingLineStart;
-    hasClosingFence = true;
+  let closingFenceStart = openingLineEnd;
+  if (closingLineStart >= openingLineEnd && closingLineStart < end) {
+    const closingStart = quoteDepth === 0
+      ? closingLineStart
+      : skipBlockQuoteMarkers(md, closingLineStart, end, quoteDepth);
+    if (closingStart === undefined)
+      return undefined;
+    closingFenceStart = closingStart;
+    let removedIndentation = 0;
+    while (
+      removedIndentation < openingIndent
+      && md.charCodeAt(closingFenceStart) === 32
+    ) {
+      closingFenceStart++;
+      removedIndentation++;
+    }
+    const closing = md.slice(closingFenceStart, end);
+    const closingMatch = /^( {0,3})(`+|~+)[ \t]*$/.exec(closing);
+    if (
+      closingMatch
+      && closingMatch[2].charCodeAt(0) === marker
+      && closingMatch[2].length >= fenceLength
+    ) {
+      contentEnd = closingLineStart;
+      hasClosingFence = true;
+    }
   }
 
   const spans: SourceSpan[] = [];
