@@ -46,6 +46,7 @@
     "test": "jest && pnpm run test:types && pnpm run test:package",
     "test:types": "tsc -p __tests__/types/tsconfig.json",
     "test:package": "publint && node scripts/test-package.mjs",
+    "bench:source-map": "node scripts/bench-source-map.mjs",
     "test:update": "jest --updateSnapshot",
     "prepublishOnly": "pnpm run lint && pnpm run build && pnpm run test"
   },

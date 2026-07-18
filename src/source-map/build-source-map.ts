@@ -260,15 +260,31 @@ function pointAtOffset(lineStarts: number[], md: string, offset: number): Parsed
   };
 }
 
-/** Find the segment covering `valueIndex`, or undefined. */
+/**
+ * Find the segment covering `valueIndex`, or undefined.
+ *
+ * Segments are ordered, gap-free, and non-overlapping (see {@link
+ * RecordingState.segments}), so this binary-searches for the last segment whose
+ * `valueStart <= valueIndex`, then confirms `valueIndex < valueEnd`. This keeps
+ * each lookup at O(log segments) instead of O(segments), which matters for
+ * pathological text nodes with many alternating entity/escape segments queried
+ * repeatedly.
+ */
 function findSegmentAt(
   segs: MarkdownSourceMapSegment[],
   valueIndex: number,
 ): MarkdownSourceMapSegment | undefined {
-  for (const seg of segs) {
-    if (valueIndex >= seg.valueStart && valueIndex < seg.valueEnd) {
-      return seg;
-    }
+  let lo = 0;
+  let hi = segs.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (segs[mid].valueStart <= valueIndex)
+      lo = mid;
+    else hi = mid - 1;
+  }
+  const seg = segs[lo];
+  if (seg && valueIndex >= seg.valueStart && valueIndex < seg.valueEnd) {
+    return seg;
   }
   return undefined;
 }
