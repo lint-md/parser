@@ -182,6 +182,11 @@ function recordingExtension(state: RecordingState) {
       && this.config.canContainEols.includes(context.type)
     ) {
       onenterdata.call(this, token);
+      // A line ending is verbatim source (1:1). Reset `kind` to 'literal' so it
+      // does not inherit the previous construct's kind (e.g. 'escape' left by a
+      // preceding `\(`), which would wrongly mark the CRLF as an atomic segment
+      // and break per-code-unit mapping of `\r` / `\n`.
+      state.kind = 'literal';
       onexitdata.call(this, token);
     }
   };

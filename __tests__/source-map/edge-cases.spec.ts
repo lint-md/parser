@@ -78,3 +78,40 @@ describe('source-map edge cases', () => {
     }
   });
 });
+
+describe('CRLF after an escape / reference maps per code unit (#57)', () => {
+  // A CRLF immediately after an escape or character reference must not inherit
+  // the preceding construct's kind. If it did, the '\r' and '\n' would be
+  // treated as one atomic segment: both code units would map to the whole
+  // '\r\n' (overlapping), and the empty range at the CR/LF boundary would throw.
+  test.each<[string, string]>([
+    ['escape then CRLF', '\\(\r\nx'],
+    ['named reference then CRLF', '&amp;\r\nx'],
+    ['normalized numeric reference then CRLF', '&#0;\r\nx'],
+  ])('%s', (_label, md) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = textNode(ast);
+    const value: string = node.value;
+
+    // Locate the CR and LF within the decoded value.
+    const cr = value.indexOf('\r');
+    expect(cr).toBeGreaterThanOrEqual(0);
+    const lf = cr + 1;
+    expect(value[lf]).toBe('\n');
+
+    // '\r' and '\n' are literal, 1:1 code units: each maps to exactly one
+    // source code unit, and the two ranges are adjacent (not overlapping).
+    const crRange = sourceMap.getSourceRange(node, cr, cr + 1);
+    const lfRange = sourceMap.getSourceRange(node, lf, lf + 1);
+    expect(md.slice(crRange.start.offset, crRange.end.offset)).toBe('\r');
+    expect(md.slice(lfRange.start.offset, lfRange.end.offset)).toBe('\n');
+    expect(crRange.end.offset).toBe(lfRange.start.offset);
+    expect(lfRange.start.offset - crRange.start.offset).toBe(1);
+
+    // The empty range at the CR/LF boundary resolves to the exact point between
+    // them instead of throwing (it is not inside a multi-unit atomic segment).
+    const between = sourceMap.getSourceRange(node, lf, lf);
+    expect(between.start.offset).toBe(crRange.end.offset);
+    expect(between.end.offset).toBe(crRange.end.offset);
+  });
+});
