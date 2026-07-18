@@ -6,6 +6,11 @@
 
 - 修复转义字符后紧跟 CRLF 时，换行 source-map segment 错误继承 `escape` kind，导致 `\r` 与 `\n` 被作为同一原子段映射（两者映射到整个 `\r\n` 且重叠、CR/LF 之间的空区间误抛 `RangeError`）的问题；换行现按逐 UTF-16 code unit 正确映射（#57）
 
+### Tests
+
+- 新增确定性差分组合 fuzz 测试（`__tests__/source-map/differential.spec.ts`）：枚举原子 Markdown 片段的笛卡尔积（225 个 pair、1125 个 triple、300 个行首前缀组合，以及 13 个 CRLF+x oracle，共 1663 个生成用例）。每篇文档断言 AST parity、整值 range 与逐 UTF-16 code unit range 均单调且落在原文内、`getRaw` 与整值区间一致；并新增「任意前序构造后接 CRLF+x」的 oracle 检查——从生成输入的已知后缀位置直接断言 `\r`/`\n`/x 各自映射为单个源码 code unit（oracle 来自输入而非映射结果，避免用被测输出反推 literal），系统覆盖 #57「前序构造污染后续 literal」类别。通用 fuzz 不再 swallow `getRaw` 异常，且对每个 owned node（含非 text）断言 `getRaw` 等于其 position 的源码切片。该测试纳入默认 Jest suite，并随现有 CI 测试任务执行（#58）。
+
+
 ## 0.1.3
 
 ### Added
