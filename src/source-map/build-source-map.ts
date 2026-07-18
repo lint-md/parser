@@ -715,12 +715,16 @@ function buildFencedCodeSegments(
   const openingIndent = fencedIndentation(md, physicalLineStart, start, quoteDepth);
   if (openingIndent < 0)
     return undefined;
-  const openingLineEnd = lineEnd(md, start, end);
+  // A blockquote code node can end before its final physical line ending, so
+  // derive the opening line boundary from the complete Markdown rather than
+  // the node's position span. This keeps an unclosed empty fence's insertion
+  // point at the actual EOF.
+  const openingLineEnd = lineEnd(md, start, md.length);
   let contentEnd = end;
   let hasClosingFence = false;
   const closingLineStart = lineStart(md, start, end);
   let closingFenceStart = openingLineEnd;
-  if (closingLineStart >= openingLineEnd) {
+  if (closingLineStart >= openingLineEnd && closingLineStart < end) {
     const closingStart = quoteDepth === 0
       ? closingLineStart
       : skipBlockQuoteMarkers(md, closingLineStart, end, quoteDepth);

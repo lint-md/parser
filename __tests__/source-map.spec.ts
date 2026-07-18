@@ -487,6 +487,20 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expect(point.end.offset).toBe(expectedOffset);
   });
 
+  test.each([
+    ['> ```', 5],
+    ['> ```\n', 6],
+    ['> ```\r', 6],
+    ['> ```\r\n', 7],
+  ])('maps an unclosed empty fence inside a blockquote to EOF: %p', (md, expectedOffset) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('');
+    const point = sourceMap.getSourceRange(node, 0, 0);
+    expect(point.start.offset).toBe(expectedOffset);
+    expect(point.end.offset).toBe(expectedOffset);
+  });
+
   test('rejects a code value modified after parsing', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('```\nvalue\n```');
     const node = codeNodes(ast)[0];
