@@ -8,6 +8,7 @@
 // super-linear query time.
 //
 // Run: pnpm run bench:source-map
+// Smoke (CI): node scripts/bench-source-map.mjs --smoke
 import { performance } from 'node:perf_hooks';
 import { createRequire } from 'node:module';
 
@@ -15,7 +16,11 @@ const require = createRequire(import.meta.url);
 const { parseMdWithSourceMap } = require('../dist/lint-md-parser.cjs');
 
 const UNIT = '&amp;\\('; // one character reference + one escape => 2 segments
-const SIZES_KIB = [1, 16, 64, 256];
+const SMOKE = process.argv.includes('--smoke');
+// Querying every code unit of a 64 KiB alternating-atomic input is cheap with
+// the binary-search lookup, but exposes an accidental return to a linear scan.
+const SIZES_KIB = SMOKE ? [64] : [1, 16, 64, 256];
+const SMOKE_QUERY_BUDGET_MS = 5000;
 
 /** Build an input of roughly `kib` kibibytes made of repeated UNIT. */
 function makeInput(kib) {
@@ -28,7 +33,8 @@ function makeInput(kib) {
 function firstTextNode(root) {
   let found;
   (function walk(n) {
-    if (!found && n.type === 'text') found = n;
+    if (!found && n.type === 'text')
+      found = n;
     for (const c of n.children || []) walk(c);
   })(root);
   return found;
@@ -87,8 +93,8 @@ for (const kib of SIZES_KIB) {
       () => {
         let seed = 12345;
         const rand = () => {
-          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-          return seed / 0x7fffffff;
+          seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
+          return seed / 0x7FFFFFFF;
         };
         for (let r = 0; r < len; r++) {
           const i = Math.floor(rand() * len);
@@ -106,8 +112,17 @@ for (const kib of SIZES_KIB) {
     ],
   ];
 
-  for (const [label, fn] of patterns) {
+  const selectedPatterns = SMOKE ? [patterns[0]] : patterns;
+
+  for (const [label, fn] of selectedPatterns) {
     const r = time(label, fn);
     console.log(`  ${r.label.padEnd(28)} ${fmt(r.ms)}`);
+
+    if (SMOKE && r.ms > SMOKE_QUERY_BUDGET_MS) {
+      throw new Error(
+        `benchmark smoke failed: ${r.label} took ${fmt(r.ms)} `
+        + `(budget ${SMOKE_QUERY_BUDGET_MS} ms)`,
+      );
+    }
   }
 }
