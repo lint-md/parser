@@ -36,6 +36,15 @@ function codeNodes(root: any): any[] {
   return out;
 }
 
+function nodesOfType(root: any, type: string): any[] {
+  const out: any[] = [];
+  (function walk(n: any) {
+    if (n.type === type) out.push(n);
+    for (const c of n.children || []) walk(c);
+  })(root);
+  return out;
+}
+
 describe('parseMdWithSourceMap: text.value → raw source', () => {
   test('backslash escape \\( maps to a 2-char source span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('\\(');
@@ -470,6 +479,42 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
       SourceMapConsistencyError,
     );
     expect(() => sourceMap.getRaw(node)).toThrow(SourceMapConsistencyError);
+  });
+});
+
+describe('parseMdWithSourceMap: URL fields → raw source', () => {
+  test('maps an inline link URL without its angle-bracket wrapper', () => {
+    const md = '[label](<https://x.test/a>)';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'link')[0];
+    expect(node.url).toBe('https://x.test/a');
+    expect(sourceMap.getRaw(node)).toBe(md);
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toBe('https://x.test/a');
+  });
+
+  test('maps URL escapes and entities as atomic source ranges', () => {
+    const md = '[label](a\\(b\\)&amp;c)';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'link')[0];
+    expect(node.url).toBe('a(b)&c');
+    expect(md.slice(
+      sourceMap.getFieldSourceRange(node, 'url', 1, 2).start.offset,
+      sourceMap.getFieldSourceRange(node, 'url', 1, 2).end.offset,
+    )).toBe('\\(');
+    expect(md.slice(
+      sourceMap.getFieldSourceRange(node, 'url', 4, 5).start.offset,
+      sourceMap.getFieldSourceRange(node, 'url', 4, 5).end.offset,
+    )).toBe('&amp;');
+  });
+
+  test('maps a definition URL without its title', () => {
+    const md = '[id]: <a&amp;b> "title"';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'definition')[0];
+    expect(node.url).toBe('a&b');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toBe('a&amp;b');
   });
 });
 

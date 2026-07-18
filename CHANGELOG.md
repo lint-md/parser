@@ -4,6 +4,7 @@
 
 ### Added
 
+- 新增 `MarkdownSourceMap.getFieldSourceRange(node, 'url', ...)`，为 `link.url` 与 `definition.url` 提供字段型源码映射，覆盖 `<…>` wrapper、转义与实体（#68）
 - `MarkdownSourceMap.getSourceRange()` 新增对 fenced 与 indented `code.value` 的源码映射支持，覆盖围栏、info/meta、blockquote/list 容器前缀、缩进剥离、空行以及 CR、LF、CRLF（#67）
 - `MarkdownSourceMap.getSourceRange()` 新增对 `inlineCode.value` 的源码映射支持，覆盖多反引号定界符、首尾 padding 规则以及 CR、LF、CRLF；同时新增公开类型 `MarkdownInlineCodeNode`（#66）
 

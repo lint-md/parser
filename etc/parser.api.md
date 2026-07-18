@@ -7,6 +7,7 @@
 import type { BlockContent } from 'mdast';
 import { Code } from 'mdast';
 import type { Content } from 'mdast';
+import { Definition } from 'mdast';
 import type { DefinitionContent } from 'mdast';
 import { InlineCode } from 'mdast';
 import { Link } from 'mdast';
@@ -33,6 +34,9 @@ export interface MarkdownContainerDirective extends Parent, MarkdownDirectiveFie
     // (undocumented)
     type: 'containerDirective';
 }
+
+// @public (undocumented)
+export type MarkdownDefinitionNode = Definition;
 
 // @public (undocumented)
 export interface MarkdownDirectiveFields {
@@ -81,7 +85,8 @@ export type MarkdownRoot = Root;
 
 // @public
 export interface MarkdownSourceMap {
-    getRaw(node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode): string;
+    getFieldSourceRange(node: MarkdownLinkNode | MarkdownDefinitionNode, field: 'url', valueStart: number, valueEnd: number): ParsedPosition;
+    getRaw(node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode | MarkdownLinkNode | MarkdownDefinitionNode): string;
     getSourceRange(node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode, valueStart: number, valueEnd: number): ParsedPosition;
 }
 

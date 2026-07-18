@@ -1,6 +1,8 @@
 import type {
   MarkdownCodeNode,
+  MarkdownDefinitionNode,
   MarkdownInlineCodeNode,
+  MarkdownLinkNode,
   MarkdownNode,
   MarkdownTextNode,
   ParsedPosition,
@@ -85,7 +87,8 @@ export interface MarkdownSourceMap {
    * @returns The raw Markdown that produced `node`.
    */
   getRaw(
-    node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
+    node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode
+    | MarkdownLinkNode | MarkdownDefinitionNode,
   ): string
 
   /**
@@ -114,6 +117,18 @@ export interface MarkdownSourceMap {
    */
   getSourceRange(
     node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
+    valueStart: number,
+    valueEnd: number,
+  ): ParsedPosition
+
+  /**
+   * Maps a half-open range of a named normalized field back to the raw
+   * Markdown source. The current field is `url`, supported by `link` and
+   * `definition` nodes.
+   */
+  getFieldSourceRange(
+    node: MarkdownLinkNode | MarkdownDefinitionNode,
+    field: 'url',
     valueStart: number,
     valueEnd: number,
   ): ParsedPosition

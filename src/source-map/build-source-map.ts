@@ -4,7 +4,9 @@ import { decodeNamedCharacterReference } from 'decode-named-character-reference'
 import type { Root } from 'mdast';
 import type {
   MarkdownCodeNode,
+  MarkdownDefinitionNode,
   MarkdownInlineCodeNode,
+  MarkdownLinkNode,
   MarkdownNode,
   MarkdownTextNode,
   ParsedPoint,
@@ -49,6 +51,8 @@ interface RecordingState {
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** code node -> source point for an empty value. */
   emptyCodeOffsets: WeakMap<object, number>
+  /** link / definition node -> normalized URL segments. */
+  urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -379,6 +383,142 @@ function buildInlineCodeSegments(
     sourceEnd: interiorStart + valueSourceEnd,
     kind: 'literal',
   }];
+}
+
+function isEscapableUrlCharacter(char: number): boolean {
+  return (char >= 33 && char <= 47)
+    || (char >= 58 && char <= 64)
+    || (char >= 91 && char <= 96)
+    || (char >= 123 && char <= 126);
+}
+
+function urlDestinationBounds(
+  md: string,
+  node: { type: string; position?: ParsedPosition },
+): SourceSpan | undefined {
+  const position = node.position;
+  if (!position)
+    return undefined;
+  const start = position.start.offset;
+  const end = position.end.offset;
+  let offset = start;
+
+  if (node.type === 'link') {
+    let brackets = 0;
+    for (; offset < end; offset++) {
+      const char = md.charCodeAt(offset);
+      if (char === 92) {
+        offset++;
+      }
+      else if (char === 91) {
+        brackets++;
+      }
+      else if (char === 93 && --brackets === 0 && md.charCodeAt(offset + 1) === 40) {
+        offset += 2;
+        break;
+      }
+    }
+  }
+  else if (node.type === 'definition') {
+    while (offset < end && md.charCodeAt(offset) !== 58) offset++;
+    offset++;
+    while (md.charCodeAt(offset) === 32 || md.charCodeAt(offset) === 9) offset++;
+  }
+  else {
+    return undefined;
+  }
+
+  if (offset >= end)
+    return undefined;
+  if (md.charCodeAt(offset) === 60) {
+    const destinationStart = ++offset;
+    while (offset < end && md.charCodeAt(offset) !== 62) {
+      if (md.charCodeAt(offset) === 92)
+        offset++;
+      offset++;
+    }
+    return offset < end ? { start: destinationStart, end: offset } : undefined;
+  }
+
+  const destinationStart = offset;
+  let parentheses = 0;
+  while (offset < end) {
+    const char = md.charCodeAt(offset);
+    if (char === 92) {
+      offset += 2;
+      continue;
+    }
+    if (char === 40)
+      parentheses++;
+    else if (char === 41) {
+      if (parentheses === 0)
+        break;
+      parentheses--;
+    }
+    else if (char === 32 || char === 9 || char === 10 || char === 13) {
+      break;
+    }
+    offset++;
+  }
+  return destinationStart < offset ? { start: destinationStart, end: offset } : undefined;
+}
+
+function buildUrlSegments(
+  md: string,
+  node: { type: string; url: string; position?: ParsedPosition },
+): MarkdownSourceMapSegment[] | undefined {
+  const bounds = urlDestinationBounds(md, node);
+  if (!bounds)
+    return undefined;
+  const segments: MarkdownSourceMapSegment[] = [];
+  let value = '';
+  let valueOffset = 0;
+  const add = (sourceStart: number, sourceEnd: number, output: string, kind: MarkdownSourceMapSegment['kind']) => {
+    segments.push({
+      valueStart: valueOffset,
+      valueEnd: valueOffset + output.length,
+      sourceStart,
+      sourceEnd,
+      kind,
+    });
+    value += output;
+    valueOffset += output.length;
+  };
+
+  for (let offset = bounds.start; offset < bounds.end;) {
+    const char = md.charCodeAt(offset);
+    if (char === 92 && offset + 1 < bounds.end && isEscapableUrlCharacter(md.charCodeAt(offset + 1))) {
+      add(offset, offset + 2, md[offset + 1], 'escape');
+      offset += 2;
+      continue;
+    }
+    if (char === 38) {
+      const semi = md.indexOf(';', offset + 1);
+      if (semi >= 0 && semi < bounds.end) {
+        const body = md.slice(offset + 1, semi);
+        let decoded: string | false;
+        if (body.startsWith('#')) {
+          const numeric = body.slice(1);
+          const radix = numeric.startsWith('x') || numeric.startsWith('X') ? 16 : 10;
+          decoded = decodeNumericCharacterReference(
+            radix === 16 ? numeric.slice(1) : numeric,
+            radix,
+          );
+        }
+        else {
+          decoded = decodeNamedCharacterReference(body);
+        }
+        if (decoded !== false) {
+          add(offset, semi + 1, decoded, 'character-reference');
+          offset = semi + 1;
+          continue;
+        }
+      }
+    }
+    add(offset, offset + 1, md[offset], 'literal');
+    offset++;
+  }
+  return value === node.url && segments.length > 0 ? segments : undefined;
 }
 
 interface CodeSegments {
@@ -750,6 +890,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     inlineCodeSegments: new WeakMap(),
     codeSegments: new WeakMap(),
     emptyCodeOffsets: new WeakMap(),
+    urlSegments: new WeakMap(),
   };
 
   const tree = fromMarkdown(md, {
@@ -788,6 +929,18 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     for (const child of node.children || []) recordCodeSegments(child);
   })(ast);
 
+  (function recordUrlSegments(node: any) {
+    if (
+      (node.type === 'link' || node.type === 'definition')
+      && typeof node.url === 'string'
+    ) {
+      const segments = buildUrlSegments(md, node);
+      if (segments)
+        state.urlSegments.set(node, segments);
+    }
+    for (const child of node.children || []) recordUrlSegments(child);
+  })(ast);
+
   // Record every node that belongs to this document so `getRaw` /
   // `getSourceRange` can reject foreign nodes instead of silently slicing the
   // wrong Markdown with a stolen offset. For mapped text nodes, also snapshot
@@ -809,6 +962,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       state.segments.has(node)
       || state.inlineCodeSegments.has(node)
       || state.codeSegments.has(node)
+      || state.urlSegments.has(node)
     ) {
       originalValues.set(node, node.value);
     }
@@ -834,7 +988,8 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
 
   const sourceMap: MarkdownSourceMap = {
     getRaw(
-      node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
+      node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode
+      | MarkdownLinkNode | MarkdownDefinitionNode,
     ): string {
       if (!owned.has(node as object)) {
         throw new SourceMapUnavailableError(
@@ -854,6 +1009,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       if (
         state.inlineCodeSegments.has(node as object)
         || state.codeSegments.has(node as object)
+        || state.urlSegments.has(node as object)
       ) {
         assertUnmodified(node as object);
       }
@@ -1005,6 +1161,73 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       return {
         start: pointAtOffset(lineStarts, md, startOffset),
         end: pointAtOffset(lineStarts, md, endOffset),
+      };
+    },
+
+    getFieldSourceRange(
+      node: MarkdownLinkNode | MarkdownDefinitionNode,
+      field: 'url',
+      valueStart: number,
+      valueEnd: number,
+    ): ParsedPosition {
+      if (!owned.has(node as object)) {
+        throw new SourceMapUnavailableError(
+          'getFieldSourceRange: the given node does not belong to this document',
+        );
+      }
+      if (field !== 'url') {
+        throw new SourceMapUnavailableError(
+          `getFieldSourceRange: no source mapping is available for field ${field}`,
+        );
+      }
+      if (!Number.isInteger(valueStart) || !Number.isInteger(valueEnd)) {
+        throw new RangeError(
+          'getFieldSourceRange: valueStart and valueEnd must be finite integers',
+        );
+      }
+      const segs = state.urlSegments.get(node as object);
+      if (!segs) {
+        throw new SourceMapUnavailableError(
+          'getFieldSourceRange: no URL source mapping is available for the given node',
+        );
+      }
+      assertUnmodified(node as object);
+      if (valueStart < 0 || valueEnd > node.url.length || valueStart > valueEnd) {
+        throw new RangeError(
+          `getFieldSourceRange: value range [${valueStart}, ${valueEnd}) is out of bounds`,
+        );
+      }
+      const sourceOffsetAt = (valueIndex: number, pastUnit: boolean): number => {
+        const seg = findSegmentAt(segs, valueIndex);
+        if (!seg) {
+          if (valueIndex === node.url.length)
+            return segs[segs.length - 1].sourceEnd;
+          throw new RangeError('getFieldSourceRange: range is not fully mapped');
+        }
+        if (seg.kind !== 'literal')
+          return pastUnit ? seg.sourceEnd : seg.sourceStart;
+        return seg.sourceStart + (pastUnit ? valueIndex + 1 : valueIndex) - seg.valueStart;
+      };
+      if (valueStart === valueEnd) {
+        const pointRange = (offset: number): ParsedPosition => {
+          const sourcePoint = pointAtOffset(lineStarts, md, offset);
+          return { start: sourcePoint, end: sourcePoint };
+        };
+        if (valueStart === 0)
+          return pointRange(segs[0].sourceStart);
+        if (valueStart === node.url.length)
+          return pointRange(segs[segs.length - 1].sourceEnd);
+        const seg = findSegmentAt(segs, valueStart);
+        if (seg && valueStart === seg.valueStart)
+          return pointRange(seg.sourceStart);
+        if (seg?.kind === 'literal') {
+          return pointRange(seg.sourceStart + valueStart - seg.valueStart);
+        }
+        throw new RangeError('getFieldSourceRange: empty range falls inside an atomic construct');
+      }
+      return {
+        start: pointAtOffset(lineStarts, md, sourceOffsetAt(valueStart, false)),
+        end: pointAtOffset(lineStarts, md, sourceOffsetAt(valueEnd - 1, true)),
       };
     },
   };
