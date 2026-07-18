@@ -3,6 +3,7 @@ import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-c
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
 import type { Root } from 'mdast';
 import type {
+  MarkdownInlineCodeNode,
   MarkdownNode,
   MarkdownTextNode,
   ParsedPoint,
@@ -41,6 +42,8 @@ interface RecordingState {
   fullSpan: boolean
   /** node -> ordered, gap-free, non-overlapping segments. */
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
+  /** inlineCode node -> value segments (see buildInlineCodeSegments). */
+  inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -285,6 +288,95 @@ function pointAtOffset(lineStarts: number[], md: string, offset: number): Parsed
 }
 
 /**
+ * Build the source-map segments for an `inlineCode` node.
+ *
+ * `inlineCode.value` is NOT a contiguous slice of the source: the GFM code
+ * span algorithm (micromark `codeText` + `mdast-util-from-markdown`) strips one
+ * leading and one trailing whitespace unit from the content when it contains
+ * non-whitespace data. A unit is one space, LF, CR, or CRLF. The parser keeps
+ * all remaining source code units verbatim, so every surviving value code unit
+ * maps 1:1 to exactly one source code unit.
+ *
+ * The mapping is computed from the node's `position` (the full source span
+ * including the backtick delimiters) plus `value`, replicating the GFM
+ * resolver: identify its delimiters, then apply its single leading/trailing
+ * whitespace-unit rule. This couples to the same parser-sensitive behavior as
+ * the text mapping (see CONTRIBUTING).
+ *
+ * @returns ordered, gap-free, 1:1 segments, or undefined if the node has no
+ *   usable position.
+ *
+ * @internal Used by buildSourceMap; not part of the public API.
+ */
+function buildInlineCodeSegments(
+  md: string,
+  node: { value: string; position?: ParsedPosition },
+): MarkdownSourceMapSegment[] | undefined {
+  const position = node.position;
+  if (!position || !position.start || !position.end)
+    return undefined;
+  const start = position.start.offset;
+  const end = position.end.offset;
+  if (start < 0 || end > md.length || start >= end)
+    return undefined;
+
+  // Full source span including the backtick delimiters.
+  const full = md.slice(start, end);
+
+  // Determine the opening / closing backtick run lengths (they must match).
+  let openLen = 0;
+  while (openLen < full.length && full.charCodeAt(openLen) === 96 /* ` */) openLen++;
+  let closeLen = 0;
+  while (closeLen < full.length && full.charCodeAt(full.length - 1 - closeLen) === 96) closeLen++;
+  if (openLen === 0 || closeLen === 0 || openLen !== closeLen)
+    return undefined;
+
+  const interiorStart = start + openLen;
+  const interiorEnd = end - closeLen;
+  const interior = md.slice(interiorStart, interiorEnd);
+
+  const isWhitespace = (char: number): boolean =>
+    char === 32 || char === 10 || char === 13;
+  const leadingWhitespaceEnd = (): number => {
+    const first = interior.charCodeAt(0);
+    if (first === 13 && interior.charCodeAt(1) === 10)
+      return 2;
+    return isWhitespace(first) ? 1 : 0;
+  };
+  const trailingWhitespaceStart = (): number => {
+    const last = interior.charCodeAt(interior.length - 1);
+    if (last === 10 && interior.charCodeAt(interior.length - 2) === 13) {
+      return interior.length - 2;
+    }
+    return isWhitespace(last) ? interior.length - 1 : interior.length;
+  };
+
+  let valueSourceStart = 0;
+  let valueSourceEnd = interior.length;
+  const leadingEnd = leadingWhitespaceEnd();
+  const trailingStart = trailingWhitespaceStart();
+  const hasData = [...interior].some(char => !isWhitespace(char.charCodeAt(0)));
+  if (leadingEnd > 0 && trailingStart < interior.length && hasData) {
+    valueSourceStart = leadingEnd;
+    valueSourceEnd = trailingStart;
+  }
+
+  // Confirm that the parser did not apply an unaccounted-for transformation.
+  // Returning undefined is safer than fabricating a source range.
+  const sourceValue = interior.slice(valueSourceStart, valueSourceEnd);
+  if (sourceValue !== node.value || sourceValue.length === 0)
+    return undefined;
+
+  return [{
+    valueStart: 0,
+    valueEnd: sourceValue.length,
+    sourceStart: interiorStart + valueSourceStart,
+    sourceEnd: interiorStart + valueSourceEnd,
+    kind: 'literal',
+  }];
+}
+
+/**
  * Find the segment covering `valueIndex`, or undefined.
  *
  * Segments are ordered, gap-free, and non-overlapping (see {@link
@@ -334,6 +426,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     activeEnd: 0,
     fullSpan: false,
     segments: new WeakMap(),
+    inlineCodeSegments: new WeakMap(),
   };
 
   const tree = fromMarkdown(md, {
@@ -346,6 +439,18 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
 
   const ast = tree as unknown as PositionedMarkdownRoot;
   const lineStarts = computeLineStarts(md);
+
+  // Inline-code nodes are compiled by the standard mdast handler rather than
+  // recordingExtension. Their positions and normalized values are nevertheless
+  // enough to build a mapping after the tree is complete.
+  (function recordInlineCodeSegments(node: any) {
+    if (node.type === 'inlineCode' && typeof node.value === 'string') {
+      const segments = buildInlineCodeSegments(md, node);
+      if (segments)
+        state.inlineCodeSegments.set(node, segments);
+    }
+    for (const child of node.children || []) recordInlineCodeSegments(child);
+  })(ast);
 
   // Record every node that belongs to this document so `getRaw` /
   // `getSourceRange` can reject foreign nodes instead of silently slicing the
@@ -364,7 +469,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
   (function register(node: any) {
     owned.add(node);
-    if (state.segments.has(node)) {
+    if (state.segments.has(node) || state.inlineCodeSegments.has(node)) {
       originalValues.set(node, node.value);
     }
     const position = (node as { position?: ParsedPosition }).position;
@@ -381,8 +486,8 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     const original = originalValues.get(node);
     if (original !== undefined && (node as { value?: string }).value !== original) {
       throw new SourceMapConsistencyError(
-        'the mapped text node has been modified since parsing; the source '
-          + 'map only covers the original parsed value',
+        'the mapped node has been modified since parsing; the source '
+        + 'map only covers the original parsed value',
       );
     }
   };
@@ -404,6 +509,9 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         // positions the text node one code unit earlier).
         return md.slice(segs[0].sourceStart, segs[segs.length - 1].sourceEnd);
       }
+      if (state.inlineCodeSegments.has(node as object)) {
+        assertUnmodified(node as object);
+      }
       // Non-mapped nodes: slice with the offsets snapshotted at parse time, so
       // post-parse mutation of `node.position` can't make `getRaw` return the
       // wrong source. A node with no snapshot never had a real source position.
@@ -418,7 +526,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     },
 
     getSourceRange(
-      node: MarkdownTextNode,
+      node: MarkdownTextNode | MarkdownInlineCodeNode,
       valueStart: number,
       valueEnd: number,
     ): ParsedPosition {
@@ -440,12 +548,13 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
             + `got [${valueStart}, ${valueEnd})`,
         );
       }
-      const segs = state.segments.get(node as object);
+      const segs = state.segments.get(node as object)
+        || state.inlineCodeSegments.get(node as object);
       if (!segs) {
         throw new SourceMapUnavailableError(
           'getSourceRange: no source mapping is available for the given '
             + 'node; it was generated, added after parsing, or is not a '
-            + 'supported text node',
+            + 'supported text or inlineCode node',
         );
       }
       assertUnmodified(node as object);
@@ -456,7 +565,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       ) {
         throw new RangeError(
           `getSourceRange: value range [${valueStart}, ${valueEnd}) is out of `
-            + `bounds for a text node of length ${node.value.length}`,
+            + `bounds for a mapped node of length ${node.value.length}`,
         );
       }
 

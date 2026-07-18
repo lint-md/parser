@@ -8,6 +8,7 @@ import type { BlockContent } from 'mdast';
 import { Code } from 'mdast';
 import type { Content } from 'mdast';
 import type { DefinitionContent } from 'mdast';
+import { InlineCode } from 'mdast';
 import { Link } from 'mdast';
 import { ListItem } from 'mdast';
 import type { Literal } from 'mdast';
@@ -40,6 +41,9 @@ export interface MarkdownDirectiveFields {
     // (undocumented)
     name: string;
 }
+
+// @public (undocumented)
+export type MarkdownInlineCodeNode = InlineCode;
 
 // @public (undocumented)
 export interface MarkdownInlineMath extends Literal {
@@ -77,8 +81,8 @@ export type MarkdownRoot = Root;
 
 // @public
 export interface MarkdownSourceMap {
-    getRaw(node: MarkdownNode): string;
-    getSourceRange(node: MarkdownTextNode, valueStart: number, valueEnd: number): ParsedPosition;
+    getRaw(node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode): string;
+    getSourceRange(node: MarkdownTextNode | MarkdownInlineCodeNode, valueStart: number, valueEnd: number): ParsedPosition;
 }
 
 // @public (undocumented)
