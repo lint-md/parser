@@ -2,37 +2,13 @@ name: source-map validation
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
 
 permissions:
   contents: read
 
 jobs:
-  Benchmark-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout parser
-        uses: actions/checkout@v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v6.3.0
-        with:
-          node-version: '22'
-
-      - name: Setup PNPM
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 11.0.9
-
-      - name: Install modules and build parser
-        run: pnpm install --frozen-lockfile && pnpm run build
-
-      # The full benchmark remains a local diagnostic. This bounded,
-      # pathological query shape detects a linear lookup regression.
-      - name: Run source-map benchmark smoke
-        run: node scripts/bench-source-map.mjs --smoke
-
   Core-compat:
     runs-on: ubuntu-latest
     steps:
@@ -53,6 +29,9 @@ jobs:
 
       - name: Install modules and build parser
         run: pnpm install --frozen-lockfile && pnpm run build
+
+      # The benchmark smoke runs on every Node 22 PR job. This workflow is for
+      # the heavier downstream compatibility validation only.
 
       - name: Pack parser artifact
         run: pnpm pack --pack-destination "$RUNNER_TEMP"

@@ -34,6 +34,12 @@ jobs:
       - name: Run tests
         run: pnpm run test
 
+      # Reuses this job's checkout, dependencies, and build. The smoke query
+      # is milliseconds with the binary lookup but catches a linear regression.
+      - name: Run source-map benchmark smoke
+        if: matrix.node-version == '22'
+        run: node scripts/bench-source-map.mjs --smoke
+
   Lint:
     runs-on: ubuntu-latest
     strategy:
