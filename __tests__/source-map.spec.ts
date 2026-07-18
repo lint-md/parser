@@ -396,6 +396,26 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expect(md.slice(range.start.offset, range.end.offset)).toContain('const x = 1');
   });
 
+  test.each(['```', '~~~'])(
+    'maps a fenced code block after a blockquote tab prefix: %p',
+    (fence) => {
+      const md = '> \t' + fence + '\n> \tcode\n> \t' + fence;
+      const { ast, sourceMap } = parseMdWithSourceMap(md);
+      const node = codeNodes(ast)[0];
+      expect(node.value).toBe('code');
+      const range = sourceMap.getSourceRange(node, 0, node.value.length);
+      expect(md.slice(range.start.offset, range.end.offset)).toBe('code');
+    },
+  );
+
+  test('maps a fenced code block with equivalent tab and space indentation', () => {
+    const md = '> \t```\n> \tcode\n>  ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('code');
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
   test('maps indented code inside a blockquote', () => {
     const md = '>     indented\n>     code';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
@@ -413,6 +433,14 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expect(md.slice(range.start.offset, range.end.offset)).toBe('value');
   });
 
+  test('maps fenced code in a list with equivalent tab and space indentation', () => {
+    const md = '- item\n\t```\n    code\n\t```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('code');
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
   test('maps multi-line indented code inside a list', () => {
     const md = '- Foo\n\n      bar\n      baz';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
@@ -424,6 +452,18 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
 
+  test.each(['\n', '\r', '\r\n'])(
+    'maps multi-line indented code after a tab list continuation prefix with %p',
+    (lineEnding) => {
+      const md = '- Foo' + lineEnding + lineEnding
+        + '\t  bar' + lineEnding + '\t  baz';
+      const { ast, sourceMap } = parseMdWithSourceMap(md);
+      const node = codeNodes(ast)[0];
+      expect(node.value).toBe('bar' + lineEnding + 'baz');
+      expectPerCodeUnitRanges(md, node, sourceMap);
+    },
+  );
+
   test('maps multi-line indented code inside a blockquote list', () => {
     const md = '> - Foo\n>\n>       bar\n>       baz';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
@@ -432,6 +472,14 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     const whole = sourceMap.getSourceRange(node, 0, node.value.length);
     expect(whole.start.offset).toBe(md.indexOf('bar'));
     expect(whole.end.offset).toBe(md.indexOf('baz') + 3);
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
+  test('maps multi-line indented code with a tab inside a blockquote list', () => {
+    const md = '> - Foo\n>\n>     \tbar\n>     \tbaz';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('bar\nbaz');
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
 
