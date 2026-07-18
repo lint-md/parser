@@ -30,13 +30,15 @@ describe('source-map edge cases', () => {
     const node = textNode(ast);
     expect(node.value).toBe(expectedValue);
 
+    // Each fixture produces a single text node covering the whole input, so
+    // assert the exact source span independently of getRaw(). This catches
+    // mappings that drop a leading/trailing character symmetrically (e.g.
+    // '&unknown;' -> 'unknown;'), which getRaw()/slice agreement alone would
+    // not detect since both derive from the same internal mapping.
     const whole = sourceMap.getSourceRange(node, 0, node.value.length);
-    expect(whole.start.offset).toBeGreaterThanOrEqual(0);
-    expect(whole.end.offset).toBeGreaterThanOrEqual(whole.start.offset);
-    expect(whole.end.offset).toBeLessThanOrEqual(md.length);
-    expect(md.slice(whole.start.offset, whole.end.offset)).toBe(
-      sourceMap.getRaw(node),
-    );
+    expect([whole.start.offset, whole.end.offset]).toEqual([0, md.length]);
+    expect(sourceMap.getRaw(node)).toBe(md);
+    expect(md.slice(whole.start.offset, whole.end.offset)).toBe(md);
 
     // Per-index ranges are non-decreasing.
     let prevStart = whole.start.offset;
@@ -61,12 +63,18 @@ describe('source-map edge cases', () => {
     expect([whole.start.offset, whole.end.offset]).toEqual([0, md.length]);
     expect(sourceMap.getRaw(node)).toBe(md);
 
-    // value[2] = '(' from the '\(' escape -> 2-char source token.
-    const escapeRange = sourceMap.getSourceRange(node, 2, 3);
-    expect(escapeRange.end.offset - escapeRange.start.offset).toBe(2);
-
-    // value[5] = '(' from the '&#40;' reference -> 5-char source token.
-    const refRange = sourceMap.getSourceRange(node, 5, 6);
-    expect(refRange.end.offset - refRange.start.offset).toBe(5);
+    // Every atomic token (escape / reference) maps to its exact raw source,
+    // while literal runs map 1:1. Assert the sliced raw string, not just the
+    // range length.
+    const atomicTokens: Array<[number, string]> = [
+      [2, '\\('], // value[2] '(' from the '\(' escape
+      [4, '&amp;'], // value[4] '&' from the '&amp;' named reference
+      [5, '&#40;'], // value[5] '(' from the '&#40;' decimal reference
+      [7, '\\)'], // value[7] ')' from the '\)' escape
+    ];
+    for (const [index, expectedRaw] of atomicTokens) {
+      const range = sourceMap.getSourceRange(node, index, index + 1);
+      expect(md.slice(range.start.offset, range.end.offset)).toBe(expectedRaw);
+    }
   });
 });
