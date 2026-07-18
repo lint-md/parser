@@ -53,6 +53,8 @@ interface RecordingState {
   emptyCodeOffsets: WeakMap<object, number>
   /** link / definition node -> normalized URL segments. */
   urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  /** link / definition node -> source point for an empty URL. */
+  emptyUrlOffsets: WeakMap<object, number>
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -392,6 +394,45 @@ function isEscapableUrlCharacter(char: number): boolean {
     || (char >= 123 && char <= 126);
 }
 
+function skipUrlWhitespace(md: string, offset: number, end: number): number {
+  while (offset < end) {
+    const char = md.charCodeAt(offset);
+    if (char !== 32 && char !== 9 && char !== 10 && char !== 13)
+      break;
+    offset++;
+  }
+  return offset;
+}
+
+function labelEnd(md: string, start: number, end: number): number | undefined {
+  if (md.charCodeAt(start) !== 91)
+    return undefined;
+  let depth = 0;
+  for (let offset = start; offset < end; offset++) {
+    const char = md.charCodeAt(offset);
+    if (char === 92) {
+      offset++;
+      continue;
+    }
+    // A `]` inside a code span is label text, not the end of the label.
+    if (char === 96) {
+      let runEnd = offset;
+      while (md.charCodeAt(runEnd) === 96) runEnd++;
+      const run = md.slice(offset, runEnd);
+      const close = md.indexOf(run, runEnd);
+      if (close >= 0 && close < end) {
+        offset = close + run.length - 1;
+        continue;
+      }
+    }
+    if (char === 91)
+      depth++;
+    else if (char === 93 && --depth === 0)
+      return offset;
+  }
+  return undefined;
+}
+
 function urlDestinationBounds(
   md: string,
   node: { type: string; position?: ParsedPosition },
@@ -401,35 +442,26 @@ function urlDestinationBounds(
     return undefined;
   const start = position.start.offset;
   const end = position.end.offset;
-  let offset = start;
+  let offset: number;
 
   if (node.type === 'link') {
-    let brackets = 0;
-    for (; offset < end; offset++) {
-      const char = md.charCodeAt(offset);
-      if (char === 92) {
-        offset++;
-      }
-      else if (char === 91) {
-        brackets++;
-      }
-      else if (char === 93 && --brackets === 0 && md.charCodeAt(offset + 1) === 40) {
-        offset += 2;
-        break;
-      }
-    }
+    const endOfLabel = labelEnd(md, start, end);
+    if (endOfLabel === undefined || md.charCodeAt(endOfLabel + 1) !== 40)
+      return undefined;
+    offset = skipUrlWhitespace(md, endOfLabel + 2, end);
   }
   else if (node.type === 'definition') {
-    while (offset < end && md.charCodeAt(offset) !== 58) offset++;
-    offset++;
-    while (md.charCodeAt(offset) === 32 || md.charCodeAt(offset) === 9) offset++;
+    const endOfLabel = labelEnd(md, start, end);
+    if (endOfLabel === undefined || md.charCodeAt(endOfLabel + 1) !== 58)
+      return undefined;
+    offset = skipUrlWhitespace(md, endOfLabel + 2, end);
   }
   else {
     return undefined;
   }
 
   if (offset >= end)
-    return undefined;
+    return { start: offset, end: offset };
   if (md.charCodeAt(offset) === 60) {
     const destinationStart = ++offset;
     while (offset < end && md.charCodeAt(offset) !== 62) {
@@ -460,16 +492,26 @@ function urlDestinationBounds(
     }
     offset++;
   }
-  return destinationStart < offset ? { start: destinationStart, end: offset } : undefined;
+  return { start: destinationStart, end: offset };
+}
+
+interface UrlSegments {
+  segments: MarkdownSourceMapSegment[]
+  emptyOffset?: number
 }
 
 function buildUrlSegments(
   md: string,
   node: { type: string; url: string; position?: ParsedPosition },
-): MarkdownSourceMapSegment[] | undefined {
+): UrlSegments | undefined {
   const bounds = urlDestinationBounds(md, node);
   if (!bounds)
     return undefined;
+  if (bounds.start === bounds.end) {
+    return node.url === ''
+      ? { segments: [], emptyOffset: bounds.start }
+      : undefined;
+  }
   const segments: MarkdownSourceMapSegment[] = [];
   let value = '';
   let valueOffset = 0;
@@ -484,12 +526,19 @@ function buildUrlSegments(
     value += output;
     valueOffset += output.length;
   };
+  let literalStart = bounds.start;
+  const flushLiteral = (end: number): void => {
+    if (literalStart < end)
+      add(literalStart, end, md.slice(literalStart, end), 'literal');
+  };
 
   for (let offset = bounds.start; offset < bounds.end;) {
     const char = md.charCodeAt(offset);
     if (char === 92 && offset + 1 < bounds.end && isEscapableUrlCharacter(md.charCodeAt(offset + 1))) {
+      flushLiteral(offset);
       add(offset, offset + 2, md[offset + 1], 'escape');
       offset += 2;
+      literalStart = offset;
       continue;
     }
     if (char === 38) {
@@ -509,16 +558,18 @@ function buildUrlSegments(
           decoded = decodeNamedCharacterReference(body);
         }
         if (decoded !== false) {
+          flushLiteral(offset);
           add(offset, semi + 1, decoded, 'character-reference');
           offset = semi + 1;
+          literalStart = offset;
           continue;
         }
       }
     }
-    add(offset, offset + 1, md[offset], 'literal');
     offset++;
   }
-  return value === node.url && segments.length > 0 ? segments : undefined;
+  flushLiteral(bounds.end);
+  return value === node.url ? { segments } : undefined;
 }
 
 interface CodeSegments {
@@ -871,7 +922,8 @@ function findSegmentAt(
  * supported normalized-value fields back to the raw Markdown source.
  *
  * The AST is identical to {@link parseMd}. The current version maps
- * `text.value`, `inlineCode.value`, and block `code.value`.
+ * `text.value`, `inlineCode.value`, block `code.value`, and the `url` field
+ * of `link` and `definition` nodes.
  *
  * @param md - Markdown text.
  * @returns The positioned AST plus a source map.
@@ -891,6 +943,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     codeSegments: new WeakMap(),
     emptyCodeOffsets: new WeakMap(),
     urlSegments: new WeakMap(),
+    emptyUrlOffsets: new WeakMap(),
   };
 
   const tree = fromMarkdown(md, {
@@ -935,8 +988,11 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       && typeof node.url === 'string'
     ) {
       const segments = buildUrlSegments(md, node);
-      if (segments)
-        state.urlSegments.set(node, segments);
+      if (segments) {
+        state.urlSegments.set(node, segments.segments);
+        if (segments.emptyOffset !== undefined)
+          state.emptyUrlOffsets.set(node, segments.emptyOffset);
+      }
     }
     for (const child of node.children || []) recordUrlSegments(child);
   })(ast);
@@ -955,6 +1011,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   // than slice with the stolen offset.
   const owned = new WeakSet<object>();
   const originalValues = new WeakMap<object, string>();
+  const originalUrls = new WeakMap<object, string>();
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
   (function register(node: any) {
     owned.add(node);
@@ -962,10 +1019,11 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       state.segments.has(node)
       || state.inlineCodeSegments.has(node)
       || state.codeSegments.has(node)
-      || state.urlSegments.has(node)
     ) {
       originalValues.set(node, node.value);
     }
+    if (state.urlSegments.has(node))
+      originalUrls.set(node, node.url);
     const position = (node as { position?: ParsedPosition }).position;
     if (position && position.start && position.end) {
       originalOffsets.set(node, [position.start.offset, position.end.offset]);
@@ -982,6 +1040,16 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       throw new SourceMapConsistencyError(
         'the mapped node has been modified since parsing; the source '
         + 'map only covers the original parsed value',
+      );
+    }
+  };
+
+  const assertUrlUnmodified = (node: object): void => {
+    const original = originalUrls.get(node);
+    if (original !== undefined && (node as { url?: string }).url !== original) {
+      throw new SourceMapConsistencyError(
+        'the mapped url field has been modified since parsing; the source '
+        + 'map only covers the original parsed URL',
       );
     }
   };
@@ -1009,10 +1077,11 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       if (
         state.inlineCodeSegments.has(node as object)
         || state.codeSegments.has(node as object)
-        || state.urlSegments.has(node as object)
       ) {
         assertUnmodified(node as object);
       }
+      if (state.urlSegments.has(node as object))
+        assertUrlUnmodified(node as object);
       // Non-mapped nodes: slice with the offsets snapshotted at parse time, so
       // post-parse mutation of `node.position` can't make `getRaw` return the
       // wrong source. A node with no snapshot never had a real source position.
@@ -1191,7 +1260,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
           'getFieldSourceRange: no URL source mapping is available for the given node',
         );
       }
-      assertUnmodified(node as object);
+      assertUrlUnmodified(node as object);
       if (valueStart < 0 || valueEnd > node.url.length || valueStart > valueEnd) {
         throw new RangeError(
           `getFieldSourceRange: value range [${valueStart}, ${valueEnd}) is out of bounds`,
@@ -1213,6 +1282,13 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
           const sourcePoint = pointAtOffset(lineStarts, md, offset);
           return { start: sourcePoint, end: sourcePoint };
         };
+        if (segs.length === 0) {
+          const emptyOffset = state.emptyUrlOffsets.get(node as object);
+          if (node.url.length === 0 && valueStart === 0 && emptyOffset !== undefined) {
+            return pointRange(emptyOffset);
+          }
+          throw new RangeError('getFieldSourceRange: range is not fully mapped');
+        }
         if (valueStart === 0)
           return pointRange(segs[0].sourceStart);
         if (valueStart === node.url.length)

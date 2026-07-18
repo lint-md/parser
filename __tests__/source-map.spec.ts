@@ -516,6 +516,57 @@ describe('parseMdWithSourceMap: URL fields → raw source', () => {
     const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
     expect(md.slice(range.start.offset, range.end.offset)).toBe('a&amp;b');
   });
+
+  test('maps destinations after inline-link whitespace and a line ending', () => {
+    const md = '[link](   /uri\n  "title"  )';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'link')[0];
+    expect(node.url).toBe('/uri');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toBe('/uri');
+  });
+
+  test.each([
+    '[foo]:\n/url',
+    '[foo]:\n  <my-url>\n  "title"',
+  ])('maps a definition destination after a line ending: %p', (md) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'definition')[0];
+    expect(node.url).toBe(md.includes('my-url') ? 'my-url' : '/url');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toBe(node.url);
+  });
+
+  test.each([
+    ['[link]()', 7],
+    ['[link](<>)', 8],
+    ['[foo]: <>', 8],
+  ])('maps an empty URL to its content boundary: %p', (md, offset) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, md.startsWith('[foo]') ? 'definition' : 'link')[0];
+    expect(node.url).toBe('');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, 0);
+    expect(range.start.offset).toBe(offset);
+    expect(range.end.offset).toBe(offset);
+  });
+
+  test('maps a definition whose label contains a colon', () => {
+    const md = '[a:b]: /url';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'definition')[0];
+    expect(node.url).toBe('/url');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toBe('/url');
+  });
+
+  test('rejects a link URL modified after parsing', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('[x](/old)');
+    const node = nodesOfType(ast, 'link')[0];
+    node.url = '/changed';
+    expect(() => sourceMap.getFieldSourceRange(node, 'url', 0, 1))
+      .toThrow(SourceMapConsistencyError);
+    expect(() => sourceMap.getRaw(node)).toThrow(SourceMapConsistencyError);
+  });
 });
 
 describe('parseMdWithSourceMap: contract', () => {
