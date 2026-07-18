@@ -1,2 +1,2 @@
 const parser = require('../dist/lint-md-parser.cjs');
-export const { parseMd, revertMdAstNode, stringifyMdAst } = parser;
+export const { parseMd, revertMdAstNode, stringifyMdAst, parseMdWithSourceMap } = parser;

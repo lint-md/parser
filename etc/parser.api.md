@@ -75,6 +75,21 @@ export type MarkdownNode = MarkdownRoot | Content;
 // @public (undocumented)
 export type MarkdownRoot = Root;
 
+// @public
+export interface MarkdownSourceMap {
+    getRaw(node: MarkdownNode): string;
+    getSourceRange(node: MarkdownTextNode, valueStart: number, valueEnd: number): ParsedPosition;
+}
+
+// @public
+export interface MarkdownSourceMapSegment {
+    kind: SourceMapSegmentKind;
+    sourceEnd: number;
+    sourceStart: number;
+    valueEnd: number;
+    valueStart: number;
+}
+
 // @public (undocumented)
 export interface MarkdownTextDirective extends Parent, MarkdownDirectiveFields {
     // (undocumented)
@@ -85,6 +100,12 @@ export interface MarkdownTextDirective extends Parent, MarkdownDirectiveFields {
 
 // @public (undocumented)
 export type MarkdownTextNode = Text_2;
+
+// @public
+export interface ParsedMarkdownDocument {
+    ast: PositionedMarkdownRoot;
+    sourceMap: MarkdownSourceMap;
+}
 
 // @public
 export interface ParsedPoint {
@@ -101,6 +122,9 @@ export interface ParsedPosition {
 
 // @public
 export const parseMd: (md: string) => PositionedMarkdownRoot;
+
+// @public
+export const parseMdWithSourceMap: (md: string) => ParsedMarkdownDocument;
 
 // @public
 export type Positioned<T> = T extends {
@@ -122,6 +146,9 @@ export type PositionedMarkdownRoot = Positioned<MarkdownRoot>;
 const revertMdAstNode: (node: MarkdownRoot) => string;
 export { revertMdAstNode }
 export { revertMdAstNode as stringifyMdAst }
+
+// @public
+export type SourceMapSegmentKind = 'literal' | 'escape' | 'character-reference' | 'normalization' | 'generated';
 
 export { Text_2 as Text }
 

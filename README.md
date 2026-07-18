@@ -51,6 +51,47 @@ firstNode.position.end.offset; // number
 > 如果要向解析结果插入自行构造的无 position 节点，请先将其类型放宽为 `MarkdownRoot`，
 > 或为新节点补齐 position。
 
+## 源码映射（source map）
+
+`parseMd` 只保证每个节点在原始 Markdown 中的整体范围（`node.position`）。但对于
+`text` 节点，`node.value` 已经过归一化（如 `\(` → `(`、`&amp;` → `&`），而
+`node.position` 仍指向原始文本。要回答“`node.value` 中的某一段对应原文哪一段”，
+请使用 `parseMdWithSourceMap`：
+
+```ts
+import { parseMdWithSourceMap } from '@lint-md/parser';
+
+const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B');
+
+const textNode = ast.children[0].children[0]; // text value "A&B"
+// 把 value 中第 1 个字符（解码后的 '&'）映射回原始 Markdown 的 '&amp;' 区间
+const range = sourceMap.getSourceRange(textNode, 1, 2);
+// range.start.offset === 1, range.end.offset === 6
+
+// 取回该 text 节点对应的原始 Markdown 子串
+sourceMap.getRaw(textNode); // 'A&amp;B'
+```
+
+### 为什么由 parser 提供
+
+只有 tokenizer / AST 编译器掌握完整上下文，才能正确处理：
+
+- `\(` 是否被解析为转义字符
+- `&amp;` 是否被解析为字符引用，还是（如在 autolink `<https://…?a&amp;b>` 中）保持字面量
+- 数值字符引用被归一化成什么字符，非法码点是否变为替换字符（U+FFFD）
+
+下游若自行重新解析或对齐，会与 parser / 实体库的语义产生漂移。`parseMdWithSourceMap`
+在同一次 micromark → mdast 编译过程中直接记录映射，复用与 `parseMd` 完全相同的
+解码决策路径。
+
+### 契约
+
+- `getSourceRange(node, valueStart, valueEnd)` 的索引与 JavaScript 字符串下标一致，范围均为半开区间 `[start, end)`。
+- 映射覆盖整个 `node.value`，segment 之间无空洞、无重叠。
+- `getSourceRange(node, 0, node.value.length)` 覆盖该 text 节点的完整原始来源范围。
+- 无法对应原文的节点（如插件合成节点）`getRaw` / `getSourceRange` 会抛出 `RangeError`，不会伪造位置。
+- 当前版本仅覆盖 `text.value`；其余字段（`inlineCode.value`、`code.value`、`link.url` 等）后续版本补充。
+
 ## 开发验证
 
 ```bash

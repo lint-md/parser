@@ -40,9 +40,7 @@ try {
       'utf8',
     ),
   );
-  assert.deepEqual(Object.keys(installedManifest.dependencies), [
-    '@types/mdast',
-  ]);
+  assert.deepEqual(Object.keys(installedManifest.dependencies), ['@types/mdast']);
 
   const cjsResult = run('node', [
     '-e',

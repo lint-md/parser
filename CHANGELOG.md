@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.1.3
+
+### Added
+
+- 新增 `parseMdWithSourceMap(md)`，在解析同时产出 `text` 节点 `value` 到原始 Markdown 的源码映射（`MarkdownSourceMap`）
+- 新增公开类型 `ParsedMarkdownDocument`、`MarkdownSourceMap`、`MarkdownSourceMapSegment`、`SourceMapSegmentKind`
+- `MarkdownSourceMap.getRaw` / `getSourceRange` 提供"归一化 value → 原始 source 区间"的反查能力，autolink 内保持字面量的 `&amp;` 也正确映射
+- 新增依赖：`mdast-util-from-markdown`、`decode-named-character-reference`、`micromark-util-decode-numeric-character-reference`（与 remark 内部使用的版本一致，避免实体解码语义漂移）
+
+### Tests
+
+- 新增 `__tests__/source-map.spec.ts`，覆盖转义、命名 / 十进制 / 十六进制字符引用、双 UTF-16 code unit 解码、autolink 字面量、`&#0;` / `&#128;` / `&#xFDD0;` 等非法码点、CRLF 与多行、连续片段、插件拆分（www / email autolink 前后的兄弟 text 节点）与无法归因节点的 `RangeError` 契约，以及 `getRaw` / `getSourceRange` 的越界与外来节点契约
+
+### Fixed
+
+- `getSourceRange` 将转义 / 字符引用 / 非法码点归一化视为**不可拆分原子**：任何与其相交的 value range 都返回该 segment 的完整 source range，避免自动修复只替换实体的一半；仅 `literal` 段支持逐 code unit 边界
+- `pointAtOffset` 改为复用与 micromark 一致的换行与列约定（CRLF / CR / LF 均结束一行，列按 UTF-16 code unit 计数），修复 `a\rb`、astral Unicode 等场景的 `line` / `column` 错误
+- `getRaw(node)` 改用节点自身的 `position` 从原文切片，对任意带 position 的 AST 节点（root、paragraph 等）都有效，不再仅限被记录的 text 节点
+- 非法码点（如 `&#0;` / `&#128;` / `&#xFDD0;`）正确记录为 `normalization` kind，而非 `character-reference`
+
+### Changed
+
+- `getSourceRange` 的结束位置改由 `valueEnd - 1` 所在 segment 计算，避免 `[0,1)` 误吞紧随其后的实体 / 转义（如 `A&amp;B` 仅映射 `A`）；空区间 `[i,i)` 若落在原子段内部则抛出 `RangeError`，因为那里不存在准确的原文边界
+- `getRaw(textNode)` 改为使用已记录的 source-map segment 的**完整** outer-token 区间（如 `&#0;` 现在返回完整的 `&#0;`，含结尾分号）；非 text 节点仍使用节点自身 `position`
+- `getRaw` / `getSourceRange` 增加文档归属校验：通过解析后遍历 AST 建立 `WeakSet`，拒绝外来节点（来自另一次 `parseMdWithSourceMap` 调用），不再用外部 offset 静默切当前文档
+- `getSourceRange` 增加有限整数校验，`valueStart` / `valueEnd` 必须为有限整数，否则抛 `RangeError`
+- 抽取共享模块 `src/remark-config.ts`（`createParserProcessor` / `getParserExtensions`），`parseMd` 与 `parseMdWithSourceMap` 复用同一套插件栈与冻结的 parser 扩展，降低 AST 漂移风险
+- 空区间 `[i,i)` 改为单独解析为单一 source point：起点 / 终点 / 某 segment 起点 / literal 段内部均返回准确边界；仅多 code unit 原子段（如 `&Afr;` 的 surrogate pair）内部才抛 `RangeError`，不再把 `[0,0)` 错误变成 `[0,1)` 或误拒原子段的精确起点
+- README 示例修正：`A&amp;B` 中 `&amp;` 的半开区间为 `[1, 6)`（原写为 `[2, 5)`）
+
+### Tests
+
+- `__tests__/source-map.spec.ts` 补充 P1 / P2 / P4 回归用例，并新增 `parseMd` 与 `parseMdWithSourceMap` 的 AST 一致性 corpus / property 测试（覆盖 GFM、directive、math、frontmatter、混合换行、astral Unicode 等）
+
 ## 0.1.2
 
 ### Added
