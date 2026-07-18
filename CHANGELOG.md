@@ -4,6 +4,7 @@
 
 ### Added
 
+- `MarkdownSourceMap.getSourceRange()` 新增对 fenced 与 indented `code.value` 的源码映射支持，覆盖围栏、info/meta、缩进剥离、空行以及 CR、LF、CRLF（#67）
 - `MarkdownSourceMap.getSourceRange()` 新增对 `inlineCode.value` 的源码映射支持，覆盖多反引号定界符、首尾 padding 规则以及 CR、LF、CRLF；同时新增公开类型 `MarkdownInlineCodeNode`（#66）
 
 ### Fixed

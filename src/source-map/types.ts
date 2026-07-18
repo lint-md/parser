@@ -1,4 +1,5 @@
 import type {
+  MarkdownCodeNode,
   MarkdownInlineCodeNode,
   MarkdownNode,
   MarkdownTextNode,
@@ -84,13 +85,13 @@ export interface MarkdownSourceMap {
    * @returns The raw Markdown that produced `node`.
    */
   getRaw(
-    node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode,
+    node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
   ): string
 
   /**
    * Maps a half-open range of a supported node's normalized `value` back to
    * the corresponding range in the raw Markdown source. Supported nodes are
-   * `text` and `inlineCode`.
+   * `text`, `inlineCode`, and block `code`.
    *
    * The returned range is monotonically increasing and covers the union of
    * every source segment spanned by `[valueStart, valueEnd)`.
@@ -99,7 +100,7 @@ export interface MarkdownSourceMap {
    *
    * - {@link SourceMapUnavailableError} — the node belongs to another
    *   document, was generated or added after parsing, or is not a
-   *   supported `text` or `inlineCode` node. No mapping is fabricated.
+   *   supported `text`, `inlineCode`, or `code` node. No mapping is fabricated.
    * - {@link SourceMapConsistencyError} — the mapped node has been modified since
    *   parsing; the map only covers the original parsed value.
    * - `RangeError` — `valueStart` / `valueEnd` are not finite integers, are
@@ -112,7 +113,7 @@ export interface MarkdownSourceMap {
    * @returns The source range covering the requested value slice.
    */
   getSourceRange(
-    node: MarkdownTextNode | MarkdownInlineCodeNode,
+    node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
     valueStart: number,
     valueEnd: number,
   ): ParsedPosition
@@ -126,6 +127,6 @@ export interface MarkdownSourceMap {
 export interface ParsedMarkdownDocument {
   /** The fully positioned AST, identical to what {@link parseMd} returns. */
   ast: import('../types').PositionedMarkdownRoot
-  /** Sidecar source map for resolving `text` value ranges to raw source. */
+  /** Sidecar source map for resolving supported value ranges to raw source. */
   sourceMap: MarkdownSourceMap
 }
