@@ -28,6 +28,17 @@
 
 - `getSourceRange` 的结束位置改由 `valueEnd - 1` 所在 segment 计算，避免 `[0,1)` 误吞紧随其后的实体 / 转义（如 `A&amp;B` 仅映射 `A`）；空区间 `[i,i)` 若落在原子段内部则抛出 `RangeError`，因为那里不存在准确的原文边界
 - `getRaw(textNode)` 改为使用已记录的 source-map segment 的**完整** outer-token 区间（如 `&#0;` 现在返回完整的 `&#0;`，含结尾分号）；非 text 节点仍使用节点自身 `position`
+
+### Refactored
+
+- 解析器不再在模块初始化时改写共享的第三方扩展单例 `gfmAutolinkLiteralFromMarkdown.transforms`（会污染同进程内所有使用该依赖实例的代码）；改为 `createParserProcessor()` 内的本地插件 `positionSafeGfm`，在当前 processor 自己的 data 中将 autolink 扩展替换为一个 `transforms` 置空的浅克隆，保持原单例不变（#50）
+- `positionSafeGfm` 保留扩展的嵌套数组结构（不 flatten 写回），并要求恰好替换一次，否则显式抛错，避免 `remark-gfm` 升级或重复依赖安装时该 workaround 静默失效；每次 `createParserProcessor()` 产出相互独立的 processor 实例
+- 解析行为、公开 API 与 positioned-node 契约完全不变；`parseMd()` 与 `parseMdWithSourceMap().ast` 对代表性语料仍深度一致
+
+### Tests
+
+- 新增 `__tests__/source-map/` 三个测试文件，通过 `getRaw` / `getSourceRange` 黑盒锁定映射不变量（整体范围合法且落在 `[0, markdown.length]`、与 `getRaw` 一致、逐 code unit 非递减、原子段可重叠）、fixer 集成（转义 / 字符引用按完整 token 从右到左替换）与边界用例（跟随 parser 实际输出，独立断言精确 source span）（#49）
+- 新增 `__tests__/parser-isolation-bundle.spec.ts`：以依赖外置（`packages: 'external'`）方式临时构建产物，令测试与产物解析到同一个 `mdast-util-gfm-autolink-literal` 单例，验证解析后单例引用与内容均未变（两种 import 顺序、重复 / 交错解析），并直接断言每个 processor 持有各自独立、`transforms` 置空的克隆；`__tests__/parser-isolation.spec.ts` 以公开 API 验证默认语法节点类型、完整 position 与 source-map parity（#50）
 - `getRaw` / `getSourceRange` 增加文档归属校验：通过解析后遍历 AST 建立 `WeakSet`，拒绝外来节点（来自另一次 `parseMdWithSourceMap` 调用），不再用外部 offset 静默切当前文档
 - `getSourceRange` 增加有限整数校验，`valueStart` / `valueEnd` 必须为有限整数，否则抛 `RangeError`
 - 抽取共享模块 `src/remark-config.ts`（`createParserProcessor` / `getParserExtensions`），`parseMd` 与 `parseMdWithSourceMap` 复用同一套插件栈与冻结的 parser 扩展，降低 AST 漂移风险
