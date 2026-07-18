@@ -148,7 +148,26 @@ export { revertMdAstNode }
 export { revertMdAstNode as stringifyMdAst }
 
 // @public
+export class SourceMapConsistencyError extends SourceMapError {
+    constructor(message?: string);
+}
+
+// @public
+export class SourceMapError extends RangeError {
+    constructor(code: SourceMapErrorCode, message: string);
+    readonly code: SourceMapErrorCode;
+}
+
+// @public
+export type SourceMapErrorCode = 'ERR_SOURCE_MAP_CONSISTENCY' | 'ERR_SOURCE_MAP_UNAVAILABLE';
+
+// @public
 export type SourceMapSegmentKind = 'literal' | 'escape' | 'character-reference' | 'normalization' | 'generated';
+
+// @public
+export class SourceMapUnavailableError extends SourceMapError {
+    constructor(message?: string);
+}
 
 export { Text_2 as Text }
 

@@ -68,6 +68,27 @@ try {
   ]);
   assert.equal(esmStringifyResult, 'true');
 
+  // parseMdWithSourceMap + the three public error classes must be present in
+  // the installed tarball, for both CJS and ESM entry points.
+  const cjsSourceMapResult = run('node', [
+    '-e',
+    "const parser = require('@lint-md/parser'); const doc = parser.parseMdWithSourceMap('# CJS'); process.stdout.write([doc.ast.type, typeof parser.SourceMapError, typeof parser.SourceMapConsistencyError, typeof parser.SourceMapUnavailableError, new parser.SourceMapConsistencyError().name, new parser.SourceMapConsistencyError().code].join(','))",
+  ]);
+  assert.equal(
+    cjsSourceMapResult,
+    'root,function,function,function,SourceMapConsistencyError,ERR_SOURCE_MAP_CONSISTENCY',
+  );
+
+  const esmSourceMapResult = run('node', [
+    '--input-type=module',
+    '-e',
+    "import { parseMdWithSourceMap, SourceMapError, SourceMapConsistencyError, SourceMapUnavailableError } from '@lint-md/parser'; const doc = parseMdWithSourceMap('# ESM'); process.stdout.write([doc.ast.type, typeof SourceMapError, typeof SourceMapConsistencyError, typeof SourceMapUnavailableError, new SourceMapUnavailableError().name, new SourceMapUnavailableError().code].join(','))",
+  ]);
+  assert.equal(
+    esmSourceMapResult,
+    'root,function,function,function,SourceMapUnavailableError,ERR_SOURCE_MAP_UNAVAILABLE',
+  );
+
   writeFileSync(
     join(consumerRoot, 'consumer.mts'),
     [
