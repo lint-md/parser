@@ -615,8 +615,33 @@ function skipBlockQuoteMarkers(
     if (md.charCodeAt(offset) !== 62)
       return undefined;
     offset++;
-    if (md.charCodeAt(offset) === 32)
+    if (md.charCodeAt(offset) === 32 || md.charCodeAt(offset) === 9)
       offset++;
+  }
+  return offset;
+}
+
+function skipIndentation(
+  md: string,
+  start: number,
+  end: number,
+  columns: number,
+): number {
+  let offset = start;
+  let removed = 0;
+  while (offset < end && removed < columns) {
+    const char = md.charCodeAt(offset);
+    if (char === 32) {
+      offset++;
+      removed++;
+    }
+    else if (char === 9) {
+      offset++;
+      removed += 4 - (removed % 4);
+    }
+    else {
+      break;
+    }
   }
   return offset;
 }
@@ -629,19 +654,25 @@ function fencedIndentation(
 ): number {
   if (quoteDepth === 0)
     return fenceStart - lineStartOffset;
-  let offset = fenceStart - 1;
-  while (offset >= lineStartOffset && md.charCodeAt(offset) !== 62) offset--;
-  if (offset < lineStartOffset)
+  let offset = skipBlockQuoteMarkers(md, lineStartOffset, fenceStart, quoteDepth);
+  if (offset === undefined)
     return -1;
-  offset++;
-  if (md.charCodeAt(offset) === 32)
-    offset++;
   let indentation = 0;
-  while (offset < fenceStart && md.charCodeAt(offset) === 32) {
-    offset++;
-    indentation++;
+  while (offset < fenceStart) {
+    const char = md.charCodeAt(offset);
+    if (char === 32) {
+      offset++;
+      indentation++;
+    }
+    else if (char === 9) {
+      offset++;
+      indentation += 4 - (indentation % 4);
+    }
+    else {
+      return -1;
+    }
   }
-  return offset === fenceStart ? indentation : -1;
+  return indentation;
 }
 
 function trimTrailingLineEnding(md: string, spans: SourceSpan[]): void {
@@ -731,14 +762,12 @@ function buildFencedCodeSegments(
     if (closingStart === undefined)
       return undefined;
     closingFenceStart = closingStart;
-    let removedIndentation = 0;
-    while (
-      removedIndentation < openingIndent
-      && md.charCodeAt(closingFenceStart) === 32
-    ) {
-      closingFenceStart++;
-      removedIndentation++;
-    }
+    closingFenceStart = skipIndentation(
+      md,
+      closingFenceStart,
+      end,
+      openingIndent,
+    );
     const closing = md.slice(closingFenceStart, end);
     const closingMatch = /^( {0,3})(`+|~+)[ \t]*$/.exec(closing);
     if (
@@ -760,11 +789,7 @@ function buildFencedCodeSegments(
       : skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth);
     if (contentStart === undefined)
       return undefined;
-    let removed = 0;
-    while (removed < openingIndent && md.charCodeAt(contentStart) === 32) {
-      contentStart++;
-      removed++;
-    }
+    contentStart = skipIndentation(md, contentStart, endOfLine, openingIndent);
     spans.push({ start: contentStart, end: endOfLine });
     offset = endOfLine;
   }
@@ -780,7 +805,7 @@ function buildFencedCodeSegments(
   };
 }
 
-function buildIndentedCodeSegments(
+function buildIndentedCodeSegmentsFromIndentation(
   md: string,
   node: { value: string; position?: ParsedPosition },
 ): CodeSegments | undefined {
@@ -856,6 +881,68 @@ function buildIndentedCodeSegments(
     segments,
     emptyOffset: start + Math.min(4, end - start),
   };
+}
+
+function buildIndentedCodeSegmentsFromValueLines(
+  md: string,
+  node: { value: string; position?: ParsedPosition },
+): CodeSegments | undefined {
+  const position = node.position;
+  if (!position)
+    return undefined;
+  const start = position.start.offset;
+  const end = position.end.offset;
+  const physicalLineStart = lineStart(md, 0, start);
+  const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
+  const valueLines = node.value.split('\n');
+  const spans: SourceSpan[] = [];
+  let offset = physicalLineStart;
+
+  for (const valueLine of valueLines) {
+    if (offset >= end)
+      return undefined;
+    const endOfLine = lineEnd(md, offset, end);
+    const contentStart = quoteDepth === 0
+      ? offset
+      : skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth);
+    if (contentStart === undefined)
+      return undefined;
+    const contentEnd = lineContentEnd(md, contentStart, endOfLine);
+    let sourceStart = contentStart;
+    while (
+      sourceStart <= contentEnd
+      && md.slice(sourceStart, contentEnd) !== valueLine
+    ) {
+      const char = md.charCodeAt(sourceStart);
+      if (char !== 32 && char !== 9)
+        return undefined;
+      sourceStart++;
+    }
+    if (sourceStart > contentEnd)
+      return undefined;
+    spans.push({ start: sourceStart, end: endOfLine });
+    offset = endOfLine;
+  }
+
+  trimTrailingLineEnding(md, spans);
+  const segments = segmentsFromSpans(md, spans, node.value);
+  if (!segments)
+    return undefined;
+  return {
+    segments,
+    emptyOffset: spans[0]?.start ?? start,
+  };
+}
+
+function buildIndentedCodeSegments(
+  md: string,
+  node: { value: string; position?: ParsedPosition },
+): CodeSegments | undefined {
+  return buildIndentedCodeSegmentsFromIndentation(md, node)
+    // A list continuation can start inside a tab's virtual columns, so its
+    // positioned node start is not sufficient to replay the physical prefix.
+    // Recover only literal suffixes; normalization remains rejected below.
+    ?? buildIndentedCodeSegmentsFromValueLines(md, node);
 }
 
 function buildCodeSegments(
