@@ -84,6 +84,8 @@ function checkDocument(md: string): void {
       expect(range.start.offset).toBeGreaterThanOrEqual(0);
       expect(range.end.offset).toBeGreaterThanOrEqual(range.start.offset);
       expect(range.end.offset).toBeLessThanOrEqual(md.length);
+      expect(range.start.offset).toBeGreaterThanOrEqual(whole.start.offset);
+      expect(range.end.offset).toBeLessThanOrEqual(whole.end.offset);
 
       expect(range.start.offset).toBeGreaterThanOrEqual(previousStart);
       expect(range.end.offset).toBeGreaterThanOrEqual(previousEnd);
