@@ -7,7 +7,7 @@
 // regression in findSegmentAt() (e.g. reverting to a linear scan) shows up as
 // super-linear query time.
 //
-// Run: node scripts/bench-source-map.mjs
+// Run: pnpm run bench:source-map
 import { performance } from 'node:perf_hooks';
 import { createRequire } from 'node:module';
 
