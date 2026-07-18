@@ -404,6 +404,34 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expect(md.slice(range.start.offset, range.end.offset)).toBe('value');
   });
 
+  test('maps multi-line indented code inside a list', () => {
+    const md = '- Foo\n\n      bar\n      baz';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('bar\nbaz');
+    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(whole.start.offset).toBe(md.indexOf('bar'));
+    expect(whole.end.offset).toBe(md.indexOf('baz') + 3);
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
+  test('maps empty fenced code inside a blockquote', () => {
+    const md = '> ```\n> ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('');
+    const point = sourceMap.getSourceRange(node, 0, 0);
+    expect(point.start.offset).toBe(md.lastIndexOf('```'));
+  });
+
+  test('maps empty fenced code inside a list', () => {
+    const md = '- item\n    ```\n    ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    const point = sourceMap.getSourceRange(node, 0, 0);
+    expect(point.start.offset).toBe(md.lastIndexOf('```'));
+  });
+
   test('excludes fenced delimiters and their indentation from code ranges', () => {
     const md = '  ```\n  a\n  b\n  ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);

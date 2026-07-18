@@ -549,6 +549,7 @@ function buildFencedCodeSegments(
     return undefined;
   const openingLineEnd = lineEnd(md, start, end);
   let contentEnd = end;
+  let hasClosingFence = false;
   const closingLineStart = lineStart(md, start, end);
   const closingStart = quoteDepth === 0
     ? closingLineStart
@@ -572,6 +573,7 @@ function buildFencedCodeSegments(
     && closingMatch[2].length >= fenceLength
   ) {
     contentEnd = closingLineStart;
+    hasClosingFence = true;
   }
 
   const spans: SourceSpan[] = [];
@@ -591,13 +593,15 @@ function buildFencedCodeSegments(
     spans.push({ start: contentStart, end: endOfLine });
     offset = endOfLine;
   }
+  const emptyOffset = spans[0]?.start
+    ?? (hasClosingFence ? closingFenceStart : openingLineEnd);
   trimTrailingLineEnding(md, spans);
   const segments = segmentsFromSpans(md, spans, node.value);
   if (!segments)
     return undefined;
   return {
     segments,
-    emptyOffset: openingLineEnd,
+    emptyOffset,
   };
 }
 
@@ -612,16 +616,37 @@ function buildIndentedCodeSegments(
   const end = position.end.offset;
   const physicalLineStart = lineStart(md, 0, start);
   const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
+  const listContinuationIndent = quoteDepth === 0
+    ? start - physicalLineStart
+    : 0;
   const spans: SourceSpan[] = [];
   let offset = start;
   let firstLine = true;
   while (offset < end) {
     const endOfLine = lineEnd(md, offset, end);
-    let contentStart = !firstLine && quoteDepth > 0
-      ? skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth)
-      : offset;
-    if (contentStart === undefined)
-      return undefined;
+    let contentStart = offset;
+    if (!firstLine && quoteDepth > 0) {
+      const afterMarkers = skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth);
+      if (afterMarkers === undefined)
+        return undefined;
+      contentStart = afterMarkers;
+    }
+    else if (!firstLine && listContinuationIndent > 0) {
+      let removedContinuation = 0;
+      while (
+        removedContinuation < listContinuationIndent
+        && md.charCodeAt(contentStart) === 32
+      ) {
+        contentStart++;
+        removedContinuation++;
+      }
+      if (
+        removedContinuation !== listContinuationIndent
+        && contentStart < lineContentEnd(md, offset, endOfLine)
+      ) {
+        return undefined;
+      }
+    }
     let indentation = 0;
     while (indentation < 4) {
       const char = md.charCodeAt(contentStart);
