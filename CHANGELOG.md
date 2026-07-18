@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- 修复转义字符后紧跟 CRLF 时，换行 source-map segment 错误继承 `escape` kind，导致 `\r` 与 `\n` 被作为同一原子段映射（两者映射到整个 `\r\n` 且重叠、CR/LF 之间的空区间误抛 `RangeError`）的问题；换行现按逐 UTF-16 code unit 正确映射（#57）
+
 ## 0.1.3
 
 ### Added
