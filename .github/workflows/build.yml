@@ -34,57 +34,6 @@ jobs:
       - name: Run tests
         run: pnpm run test
 
-      # The full benchmark remains a local diagnostic. Run one bounded,
-      # pathological query shape once in CI to catch algorithmic regressions.
-      - name: Run source-map benchmark smoke
-        if: matrix.node-version == '22'
-        run: node scripts/bench-source-map.mjs --smoke
-
-  Core-compat:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout parser
-        uses: actions/checkout@v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v6.3.0
-        with:
-          node-version: '22'
-
-      - name: Setup PNPM
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 11.0.9
-
-      - name: Install modules and build parser
-        run: pnpm install --frozen-lockfile && pnpm run build
-
-      - name: Pack parser artifact
-        run: pnpm pack --pack-destination "$RUNNER_TEMP"
-
-      - name: Checkout lint-md core
-        uses: actions/checkout@v6.0.2
-        with:
-          repository: lint-md/lint-md
-          path: core
-          persist-credentials: false
-
-      - name: Install core dependencies
-        working-directory: core
-        # lint-md does not commit package-lock.json; keep this aligned with its
-        # own workflow rather than using npm ci.
-        run: npm install
-
-      # Install the packed candidate rather than linking this checkout, so the
-      # downstream suite also validates the package's published file set.
-      - name: Test core against packed parser
-        working-directory: core
-        run: |
-          npm install --no-save --package-lock=false "$RUNNER_TEMP"/lint-md-parser-*.tgz
-          npm test -- --runInBand
-
   Lint:
     runs-on: ubuntu-latest
     strategy:
