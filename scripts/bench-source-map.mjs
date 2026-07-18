@@ -1,4 +1,5 @@
-// Benchmark for the source-map query path (issue #51).
+// Benchmark source-map query performance (issue #51) and URL-field mapping
+// construction (issue #74).
 //
 // The pathological shape is a single text node made of many alternating,
 // non-mergeable atomic segments (`&amp;` character reference + `\(` escape),
@@ -21,12 +22,22 @@ const SMOKE = process.argv.includes('--smoke');
 // in milliseconds while the pre-#55 linear lookup took several seconds.
 const SIZES_KIB = SMOKE ? [256] : [1, 16, 64, 256];
 const SMOKE_QUERY_BUDGET_MS = 1000;
+const URL_BUILD_SIZES_KIB = [16, 32, 64, 128, 256, 512];
+// A 4× URL grows close to 4× on the bounded scan. The old unbounded `&`
+// search grows beyond 6× from 128 KiB to 512 KiB; this larger interval makes
+// the quadratic term dominate while leaving headroom for CI scheduling noise.
+const SMOKE_URL_BUILD_RATIO_MAX = 6;
 
 /** Build an input of roughly `kib` kibibytes made of repeated UNIT. */
 function makeInput(kib) {
   const targetBytes = kib * 1024;
   const count = Math.max(1, Math.round(targetBytes / UNIT.length));
   return UNIT.repeat(count);
+}
+
+/** Build a link destination with no valid character references. */
+function makeUrlInput(kib) {
+  return '[x](' + '&'.repeat(kib * 1024) + ')';
 }
 
 /** The first (and only) text node of the parsed document. */
@@ -47,6 +58,24 @@ function time(label, fn) {
   fn();
   const ms = performance.now() - t0;
   return { label, ms };
+}
+
+function median(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+function timeMedian(label, fn) {
+  // Warm up once, then use a short median to keep the growth check resilient
+  // to an individual noisy CI sample.
+  fn();
+  const samples = [];
+  for (let i = 0; i < 3; i++) {
+    const t0 = performance.now();
+    fn();
+    samples.push(performance.now() - t0);
+  }
+  return { label, ms: median(samples) };
 }
 
 function fmt(ms) {
@@ -124,5 +153,29 @@ for (const kib of SIZES_KIB) {
         + `(budget ${SMOKE_QUERY_BUDGET_MS} ms)`,
       );
     }
+  }
+}
+
+console.log('\n=== URL field construction ===');
+const urlBuildResults = [];
+for (const kib of URL_BUILD_SIZES_KIB) {
+  const md = makeUrlInput(kib);
+  const result = timeMedian(`${kib} KiB non-entity URL`, () => {
+    parseMdWithSourceMap(md);
+  });
+  urlBuildResults.push(result);
+  console.log(`  ${result.label.padEnd(28)} ${fmt(result.ms)}`);
+}
+
+if (SMOKE) {
+  const smaller = urlBuildResults[3]; // 128 KiB
+  const larger = urlBuildResults[5]; // 512 KiB
+  const ratio = larger.ms / smaller.ms;
+  console.log(`  ${'128 → 512 KiB growth'.padEnd(28)} ${ratio.toFixed(2)}x`);
+  if (ratio > SMOKE_URL_BUILD_RATIO_MAX) {
+    throw new Error(
+      `benchmark smoke failed: URL construction grew ${ratio.toFixed(2)}x `
+      + `from 128 KiB to 512 KiB (budget ${SMOKE_URL_BUILD_RATIO_MAX}x)`,
+    );
   }
 }

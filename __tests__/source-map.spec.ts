@@ -518,6 +518,16 @@ describe('parseMdWithSourceMap: URL fields → raw source', () => {
     )).toBe('&amp;');
   });
 
+  test('maps the longest parser-valid named URL character reference', () => {
+    const entity = '&CounterClockwiseContourIntegral;';
+    const md = '[label](' + entity + ')';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'link')[0];
+    expect(node.url).toBe('∳');
+    const range = sourceMap.getFieldSourceRange(node, 'url', 0, 1);
+    expect(md.slice(range.start.offset, range.end.offset)).toBe(entity);
+  });
+
   test('maps a definition URL without its title', () => {
     const md = '[id]: <a&amp;b> "title"';
     const { ast, sourceMap } = parseMdWithSourceMap(md);

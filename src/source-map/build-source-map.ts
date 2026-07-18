@@ -60,6 +60,11 @@ interface RecordingState {
 }
 
 const REPLACEMENT_CHARACTER = '�';
+// micromark limits named character references to 31 code units; numeric
+// references are shorter. Include the leading `&` and trailing `;` so URL
+// mapping only considers parser-valid candidates and never scans an entire
+// destination for every literal ampersand.
+const MAX_CHARACTER_REFERENCE_SOURCE_LENGTH = 33;
 
 const point = (d: { line: number; column: number; offset: number }): ParsedPoint => ({
   line: d.line,
@@ -456,6 +461,19 @@ function isEscapableUrlCharacter(char: number): boolean {
     || (char >= 123 && char <= 126);
 }
 
+function characterReferenceEnd(
+  md: string,
+  start: number,
+  end: number,
+): number | undefined {
+  const limit = Math.min(end, start + MAX_CHARACTER_REFERENCE_SOURCE_LENGTH);
+  for (let offset = start + 1; offset < limit; offset++) {
+    if (md.charCodeAt(offset) === 59)
+      return offset;
+  }
+  return undefined;
+}
+
 interface UrlSegments {
   segments: MarkdownSourceMapSegment[]
   emptyOffset?: number
@@ -501,8 +519,8 @@ function buildUrlSegments(
       continue;
     }
     if (char === 38) {
-      const semi = md.indexOf(';', offset + 1);
-      if (semi >= 0 && semi < bounds.end) {
+      const semi = characterReferenceEnd(md, offset, bounds.end);
+      if (semi !== undefined) {
         const body = md.slice(offset + 1, semi);
         let decoded: string | false;
         if (body.startsWith('#')) {
