@@ -10,8 +10,9 @@ import { parseMd, parseMdWithSourceMap } from '../helpers';
 //
 // For every generated document we assert:
 //   1. parseMdWithSourceMap(md).ast deep-equals parseMd(md)  (AST parity)
-//   2. per text node: the whole value maps inside [0, md.length] and
-//      getRaw agrees with that whole-value range
+//   2. per text node: the whole value and every value code-unit range map
+//      monotonically inside [0, md.length], and getRaw agrees with the whole
+//      value range
 //   3. every owned node's getRaw succeeds and equals the source slice of its
 //      own position (no exceptions swallowed)
 //
@@ -63,7 +64,10 @@ function checkDocument(md: string): void {
   // 1. AST parity with parseMd.
   expect(ast).toEqual(parseMd(md));
 
-  // 2. Per text node: whole value maps inside md and agrees with getRaw.
+  // 2. Per text node: whole value and all code-unit ranges are monotonic,
+  //    bounded by md, and agree with getRaw. This intentionally does not
+  //    infer which segments are literal, so it remains independent from the
+  //    source map's segment classification.
   for (const node of textNodes(ast)) {
     const value: string = node.value;
 
@@ -71,6 +75,22 @@ function checkDocument(md: string): void {
     expect(whole.start.offset).toBeGreaterThanOrEqual(0);
     expect(whole.end.offset).toBeGreaterThanOrEqual(whole.start.offset);
     expect(whole.end.offset).toBeLessThanOrEqual(md.length);
+
+    let previousStart = whole.start.offset;
+    let previousEnd = whole.start.offset;
+    for (let i = 0; i < value.length; i++) {
+      const range = sourceMap.getSourceRange(node, i, i + 1);
+
+      expect(range.start.offset).toBeGreaterThanOrEqual(0);
+      expect(range.end.offset).toBeGreaterThanOrEqual(range.start.offset);
+      expect(range.end.offset).toBeLessThanOrEqual(md.length);
+
+      expect(range.start.offset).toBeGreaterThanOrEqual(previousStart);
+      expect(range.end.offset).toBeGreaterThanOrEqual(previousEnd);
+
+      previousStart = range.start.offset;
+      previousEnd = range.end.offset;
+    }
 
     const raw = sourceMap.getRaw(node);
     expect(md.slice(whole.start.offset, whole.end.offset)).toBe(raw);
