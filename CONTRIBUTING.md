@@ -55,3 +55,23 @@ Before merging any change that touches the versions above:
 
 If any parity or source-map assertion changes, that is a behavior change and
 must be documented in `CHANGELOG.md` — do not silently accept new snapshots.
+
+### On-demand source-map validation
+
+The regular Node 22 push and pull-request job runs the bounded source-map
+benchmark smoke automatically. The full downstream compatibility check is
+heavier, so it runs every Monday at 03:00 UTC and can be started before a
+parser-sensitive dependency upgrade, a source-map implementation change, or a
+release candidate from the Actions tab (or
+`gh workflow run source-map-validation.yml --ref <branch>`).
+Scheduled runs use the default branch; use the manual dispatch with an explicit
+branch before merging a candidate.
+
+The automatic smoke uses a 256 KiB alternating-atomic input, queries every
+value code unit, and rejects the known linear-search regression. The scheduled
+or manually triggered workflow runs the full `lint-md/lint-md` Jest suite after
+installing the packed parser tarball, which verifies the package artifact and
+downstream source-map integration together.
+
+The workflow uses a read-only token and disables persisted checkout
+credentials because it executes downstream repository code.
