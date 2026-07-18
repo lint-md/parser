@@ -97,9 +97,11 @@ for (const kib of SIZES_KIB) {
       },
     ],
     [
-      'sequential queries',
+      'sequential span queries',
       () => {
-        for (let i = 0; i < len; i++) sourceMap.getSourceRange(node, i, i + 1);
+        for (let i = 0; i + 8 <= len; i += 8) {
+          sourceMap.getSourceRange(node, i, i + 8);
+        }
       },
     ],
   ];
