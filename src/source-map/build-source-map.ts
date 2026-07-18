@@ -616,9 +616,12 @@ function buildIndentedCodeSegments(
   const end = position.end.offset;
   const physicalLineStart = lineStart(md, 0, start);
   const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
-  const listContinuationIndent = quoteDepth === 0
-    ? start - physicalLineStart
-    : 0;
+  const initialContentStart = quoteDepth === 0
+    ? physicalLineStart
+    : skipBlockQuoteMarkers(md, physicalLineStart, start, quoteDepth);
+  if (initialContentStart === undefined)
+    return undefined;
+  const listContinuationIndent = start - initialContentStart;
   const spans: SourceSpan[] = [];
   let offset = start;
   let firstLine = true;
@@ -631,7 +634,7 @@ function buildIndentedCodeSegments(
         return undefined;
       contentStart = afterMarkers;
     }
-    else if (!firstLine && listContinuationIndent > 0) {
+    if (!firstLine && listContinuationIndent > 0) {
       let removedContinuation = 0;
       while (
         removedContinuation < listContinuationIndent

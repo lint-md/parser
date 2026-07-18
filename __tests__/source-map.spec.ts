@@ -415,6 +415,17 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
 
+  test('maps multi-line indented code inside a blockquote list', () => {
+    const md = '> - Foo\n>\n>       bar\n>       baz';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('bar\nbaz');
+    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(whole.start.offset).toBe(md.indexOf('bar'));
+    expect(whole.end.offset).toBe(md.indexOf('baz') + 3);
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
   test('maps empty fenced code inside a blockquote', () => {
     const md = '> ```\n> ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
