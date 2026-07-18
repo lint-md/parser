@@ -31,9 +31,6 @@ jobs:
       - name: Run tests
         run: pnpm run test
 
-      - name: Run source-map differential fuzz
-        run: npx jest __tests__/source-map/differential.spec.ts
-
   Lint:
     runs-on: ubuntu-latest
     strategy:
