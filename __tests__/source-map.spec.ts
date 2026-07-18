@@ -219,6 +219,37 @@ describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
   });
 
   test.each(['\n', '\r', '\r\n'])(
+    'removes one leading and trailing %p padding unit',
+    (lineEnding) => {
+      const md = '`' + lineEnding + 'a' + lineEnding + '`';
+      const { ast, sourceMap } = parseMdWithSourceMap(md);
+      const node = inlineCodeNodes(ast)[0];
+      expect(node.value).toBe('a');
+
+      const range = sourceMap.getSourceRange(node, 0, 1);
+      expect(md.slice(range.start.offset, range.end.offset)).toBe('a');
+      expect(sourceMap.getSourceRange(node, 0, 0).start.offset).toBe(
+        1 + lineEnding.length,
+      );
+      expect(sourceMap.getSourceRange(node, 1, 1).start.offset).toBe(
+        2 + lineEnding.length,
+      );
+    },
+  );
+
+  test('maps a value containing backticks between multi-backtick delimiters', () => {
+    const md = '`` `value` ``';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = inlineCodeNodes(ast)[0];
+    expect(node.value).toBe('`value`');
+    expect(sourceMap.getRaw(node)).toBe(md);
+    expect(sourceMap.getSourceRange(node, 0, node.value.length)).toEqual({
+      start: { line: 1, column: 4, offset: 3 },
+      end: { line: 1, column: 11, offset: 10 },
+    });
+  });
+
+  test.each(['\n', '\r', '\r\n'])(
     'maps %p code units individually after padding normalization',
     (lineEnding) => {
       const md = '` a' + lineEnding + 'b `';
