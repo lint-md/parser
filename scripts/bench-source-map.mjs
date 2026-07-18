@@ -22,11 +22,11 @@ const SMOKE = process.argv.includes('--smoke');
 // in milliseconds while the pre-#55 linear lookup took several seconds.
 const SIZES_KIB = SMOKE ? [256] : [1, 16, 64, 256];
 const SMOKE_QUERY_BUDGET_MS = 1000;
-const URL_BUILD_SIZES_KIB = [16, 32, 64, 128, 256];
+const URL_BUILD_SIZES_KIB = [16, 32, 64, 128, 256, 512];
 // A 4× URL grows close to 4× on the bounded scan. The old unbounded `&`
-// search grows beyond 5.5× from 64 KiB to 256 KiB; leave headroom for CI
-// scheduling noise while measuring where the quadratic term is dominant.
-const SMOKE_URL_BUILD_RATIO_MAX = 5.5;
+// search grows beyond 6× from 128 KiB to 512 KiB; this larger interval makes
+// the quadratic term dominate while leaving headroom for CI scheduling noise.
+const SMOKE_URL_BUILD_RATIO_MAX = 6;
 
 /** Build an input of roughly `kib` kibibytes made of repeated UNIT. */
 function makeInput(kib) {
@@ -168,14 +168,14 @@ for (const kib of URL_BUILD_SIZES_KIB) {
 }
 
 if (SMOKE) {
-  const smaller = urlBuildResults[2]; // 64 KiB
-  const larger = urlBuildResults[4]; // 256 KiB
+  const smaller = urlBuildResults[3]; // 128 KiB
+  const larger = urlBuildResults[5]; // 512 KiB
   const ratio = larger.ms / smaller.ms;
-  console.log(`  ${'64 → 256 KiB growth'.padEnd(28)} ${ratio.toFixed(2)}x`);
+  console.log(`  ${'128 → 512 KiB growth'.padEnd(28)} ${ratio.toFixed(2)}x`);
   if (ratio > SMOKE_URL_BUILD_RATIO_MAX) {
     throw new Error(
       `benchmark smoke failed: URL construction grew ${ratio.toFixed(2)}x `
-      + `from 64 KiB to 256 KiB (budget ${SMOKE_URL_BUILD_RATIO_MAX}x)`,
+      + `from 128 KiB to 512 KiB (budget ${SMOKE_URL_BUILD_RATIO_MAX}x)`,
     );
   }
 }
