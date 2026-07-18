@@ -17,10 +17,10 @@ const { parseMdWithSourceMap } = require('../dist/lint-md-parser.cjs');
 
 const UNIT = '&amp;\\('; // one character reference + one escape => 2 segments
 const SMOKE = process.argv.includes('--smoke');
-// Querying every code unit of a 64 KiB alternating-atomic input is cheap with
-// the binary-search lookup, but exposes an accidental return to a linear scan.
-const SIZES_KIB = SMOKE ? [64] : [1, 16, 64, 256];
-const SMOKE_QUERY_BUDGET_MS = 5000;
+// On the 256 KiB alternating-atomic input, the binary-search lookup finishes
+// in milliseconds while the pre-#55 linear lookup took several seconds.
+const SIZES_KIB = SMOKE ? [256] : [1, 16, 64, 256];
+const SMOKE_QUERY_BUDGET_MS = 1000;
 
 /** Build an input of roughly `kib` kibibytes made of repeated UNIT. */
 function makeInput(kib) {
