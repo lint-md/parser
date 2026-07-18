@@ -4,9 +4,17 @@ const doc = parser.parseMdWithSourceMap('# CommonJS');
 const segKind: parser.MarkdownSourceMapSegment['kind'] = 'character-reference';
 const raw: string = doc.sourceMap.getRaw(doc.ast.children[0]);
 const range = doc.sourceMap.getSourceRange(doc.ast.children[0] as parser.MarkdownTextNode, 0, 1);
+const consistency = new parser.SourceMapConsistencyError();
+const asRangeError: RangeError = new parser.SourceMapUnavailableError();
+const isSourceMapError: boolean = consistency instanceof parser.SourceMapError;
+const code: string = consistency.code;
 void segKind;
 void raw;
 void range;
+void consistency;
+void asRangeError;
+void isSourceMapError;
+void code;
 
 const root = parser.parseMd('# CommonJS');
 

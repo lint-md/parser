@@ -28,13 +28,43 @@ describe('test lint-md-parser', () => {
         "import { parseMd } from '@lint-md/parser'; process.stdout.write(parseMd('# test').type)",
       ],
     ],
+    [
+      'CommonJS',
+      [
+        '-e',
+        "const parser = require('@lint-md/parser'); process.stdout.write(parser.parseMdWithSourceMap('# test').ast.type)",
+      ],
+    ],
+    [
+      'ESM',
+      [
+        '--input-type=module',
+        '-e',
+        "import { parseMdWithSourceMap } from '@lint-md/parser'; process.stdout.write(parseMdWithSourceMap('# test').ast.type)",
+      ],
+    ],
+    [
+      'CommonJS',
+      [
+        '-e',
+        "const parser = require('@lint-md/parser'); process.stdout.write(String(new parser.SourceMapConsistencyError() instanceof RangeError))",
+      ],
+    ],
+    [
+      'ESM',
+      [
+        '--input-type=module',
+        '-e',
+        "import { SourceMapConsistencyError } from '@lint-md/parser'; process.stdout.write(String(new SourceMapConsistencyError() instanceof RangeError))",
+      ],
+    ],
   ])('loads the %s package export', (_name, args) => {
     const output = execFileSync(process.execPath, args as string[], {
       cwd: path.resolve(__dirname, '..'),
       encoding: 'utf8',
     });
 
-    expect(output).toBe('root');
+    expect(['root', 'true']).toContain(output);
   });
 
   test('stringifyMdAst is same function as revertMdAstNode (CJS)', () => {

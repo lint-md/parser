@@ -8,10 +8,14 @@
 - 新增公开类型 `ParsedMarkdownDocument`、`MarkdownSourceMap`、`MarkdownSourceMapSegment`、`SourceMapSegmentKind`
 - `MarkdownSourceMap.getRaw` / `getSourceRange` 提供"归一化 value → 原始 source 区间"的反查能力，autolink 内保持字面量的 `&amp;` 也正确映射
 - 新增依赖：`mdast-util-from-markdown`、`decode-named-character-reference`、`micromark-util-decode-numeric-character-reference`（与 remark 内部使用的版本一致，避免实体解码语义漂移）
+- 新增公开错误类型 `SourceMapError` / `SourceMapConsistencyError` / `SourceMapUnavailableError`：继承 `RangeError` 并带稳定 `code` 字段（`ERR_SOURCE_MAP_CONSISTENCY` / `ERR_SOURCE_MAP_UNAVAILABLE`），区分「映射失效」「无可用映射」「非法参数」三条错误路径，`instanceof` 不可靠时可用 `code` 判断
+- `getRaw` / `getSourceRange` 检测解析后被修改的 text 节点并抛 `SourceMapConsistencyError`（映射仅对原始解析值有效；赋入相同内容的 `value` 不受影响）
 
 ### Tests
 
 - 新增 `__tests__/source-map.spec.ts`，覆盖转义、命名 / 十进制 / 十六进制字符引用、双 UTF-16 code unit 解码、autolink 字面量、`&#0;` / `&#128;` / `&#xFDD0;` 等非法码点、CRLF 与多行、连续片段、插件拆分（www / email autolink 前后的兄弟 text 节点）与无法归因节点的 `RangeError` 契约，以及 `getRaw` / `getSourceRange` 的越界与外来节点契约
+- 新增 error lifecycle 测试：解析后修改 text 节点抛 `SourceMapConsistencyError`（含 `code` / `name` / `instanceof` 断言）、无映射节点抛 `SourceMapUnavailableError`、非法参数保持普通 `RangeError`、多次解析的 source map 相互隔离
+- CJS / ESM 运行时冒烟测试覆盖 `parseMdWithSourceMap` 与错误类导出
 
 ### Fixed
 
@@ -29,6 +33,7 @@
 - 抽取共享模块 `src/remark-config.ts`（`createParserProcessor` / `getParserExtensions`），`parseMd` 与 `parseMdWithSourceMap` 复用同一套插件栈与冻结的 parser 扩展，降低 AST 漂移风险
 - 空区间 `[i,i)` 改为单独解析为单一 source point：起点 / 终点 / 某 segment 起点 / literal 段内部均返回准确边界；仅多 code unit 原子段（如 `&Afr;` 的 surrogate pair）内部才抛 `RangeError`，不再把 `[0,0)` 错误变成 `[0,1)` 或误拒原子段的精确起点
 - README 示例修正：`A&amp;B` 中 `&amp;` 的半开区间为 `[1, 6)`（原写为 `[2, 5)`）
+- esbuild 构建增加 `--keep-names`：保证压缩产物中公开错误类的 `error.name`（如 `SourceMapConsistencyError`）不被混淆；打包体积仅有微小增加
 
 ### Tests
 

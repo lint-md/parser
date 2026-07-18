@@ -148,7 +148,23 @@ export { revertMdAstNode }
 export { revertMdAstNode as stringifyMdAst }
 
 // @public
+export class SourceMapConsistencyError extends SourceMapError {
+    constructor(message?: string);
+}
+
+// @public
+export class SourceMapError extends RangeError {
+    constructor(code: string, message: string);
+    readonly code: string;
+}
+
+// @public
 export type SourceMapSegmentKind = 'literal' | 'escape' | 'character-reference' | 'normalization' | 'generated';
+
+// @public
+export class SourceMapUnavailableError extends SourceMapError {
+    constructor(message?: string);
+}
 
 export { Text_2 as Text }
 
