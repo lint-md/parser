@@ -123,9 +123,10 @@ export interface MarkdownSourceMap {
 
   /**
    * Maps a half-open range of a named normalized field back to the raw
-   * Markdown source. The current field is `url`, supported by `link` and
-   * `definition` nodes. URL escapes and character references are atomic: a
-   * range intersecting one returns that construct's complete source span.
+   * Markdown source. The current field is `url`, supported by inline resource
+   * `link` nodes and `definition` nodes. Autolinks and GFM autolink literals
+   * are not currently mapped. URL escapes and character references are atomic:
+   * a range intersecting one returns that construct's complete source span.
    *
    * Failure modes match `getSourceRange()`; modifying the mapped `url` field
    * throws {@link SourceMapConsistencyError}.

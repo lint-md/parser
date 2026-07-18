@@ -493,6 +493,16 @@ describe('parseMdWithSourceMap: URL fields → raw source', () => {
     expect(md.slice(range.start.offset, range.end.offset)).toBe('https://x.test/a');
   });
 
+  test.each([
+    '<https://example.com>',
+    'www.example.com',
+  ])('does not yet map URL fields for autolinks: %p', (md) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'link')[0];
+    expect(() => sourceMap.getFieldSourceRange(node, 'url', 0, 1))
+      .toThrow(SourceMapUnavailableError);
+  });
+
   test('maps URL escapes and entities as atomic source ranges', () => {
     const md = '[label](a\\(b\\)&amp;c)';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
