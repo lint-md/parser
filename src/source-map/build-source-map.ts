@@ -65,6 +65,25 @@ interface CompileContext {
  * Build a `mdast`-extension whose `text`-building handlers record, alongside
  * the normal AST construction, the mapping from each `text` node's normalized
  * `value` back to the raw Markdown source.
+ *
+ * ⚠️ This couples to `mdast-util-from-markdown` / micromark INTERNALS, not the
+ * public remark API. Upgrading any parser-sensitive dependency is a parser
+ * behavior upgrade — see CONTRIBUTING.md. The undocumented upstream contracts
+ * this relies on are:
+ *
+ * - token event handler names (enter/exit): `data`, `characterEscape` /
+ *   `characterEscapeValue`, `characterReference` / `characterReferenceValue`,
+ *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`.
+ * - compile-context fields on `this` ({@link CompileContext}): `stack` (the AST
+ *   build stack), `config.canContainEols` (whether a line ending is merged into
+ *   text), `getData` / `setData` for the keys `characterReferenceType`,
+ *   `atHardBreak`, `setextHeadingSlurpLineEnding`, and `sliceSerialize`.
+ * - entity decoding must match remark's own: `decodeNumericCharacterReference` /
+ *   `decodeNamedCharacterReference` are pinned to the versions remark uses so
+ *   decoding does not drift.
+ *
+ * If any of the above changes upstream, this extension can silently produce a
+ * wrong mapping; the parity + source-map test suites are the guardrail.
  */
 function recordingExtension(state: RecordingState) {
   const onenterdata = function (this: CompileContext, token: any) {
