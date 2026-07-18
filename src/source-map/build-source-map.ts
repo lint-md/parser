@@ -4,7 +4,9 @@ import { decodeNamedCharacterReference } from 'decode-named-character-reference'
 import type { Root } from 'mdast';
 import type {
   MarkdownCodeNode,
+  MarkdownDefinitionNode,
   MarkdownInlineCodeNode,
+  MarkdownLinkNode,
   MarkdownNode,
   MarkdownTextNode,
   ParsedPoint,
@@ -49,6 +51,12 @@ interface RecordingState {
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** code node -> source point for an empty value. */
   emptyCodeOffsets: WeakMap<object, number>
+  /** link / definition node -> normalized URL segments. */
+  urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  /** link / definition node -> source point for an empty URL. */
+  emptyUrlOffsets: WeakMap<object, number>
+  /** link / definition node -> parser-confirmed destination content span. */
+  urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -67,6 +75,8 @@ interface CompileContext {
   getData: (key: string) => unknown
   setData: (key: string, value?: unknown) => void
   sliceSerialize: (token: any) => string
+  buffer: () => void
+  resume: () => string
 }
 
 /**
@@ -81,7 +91,9 @@ interface CompileContext {
  *
  * - token event handler names (enter/exit): `data`, `characterEscape` /
  *   `characterEscapeValue`, `characterReference` / `characterReferenceValue`,
- *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`.
+ *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`,
+ *   `resourceDestinationString`, `definitionDestinationString`, their literal
+ *   wrappers, and `resource`.
  * - compile-context fields on `this` ({@link CompileContext}): `stack` (the AST
  *   build stack), `config.canContainEols` (whether a line ending is merged into
  *   text), `getData` / `setData` for the keys `characterReferenceType`,
@@ -213,6 +225,55 @@ function recordingExtension(state: RecordingState) {
     node.url = `mailto:${this.sliceSerialize(token)}`;
   };
 
+  const onenterUrlDestination = function (this: CompileContext) {
+    this.buffer();
+  };
+
+  const onexitUrlDestination = function (this: CompileContext, token: any) {
+    const url = this.resume();
+    const node = this.stack[this.stack.length - 1];
+    node.url = url;
+    if (node.type === 'link' || node.type === 'definition') {
+      state.urlSourceSpans.set(node, {
+        start: token.start.offset,
+        end: token.end.offset,
+      });
+    }
+  };
+
+  const onexitDestinationLiteral = function (this: CompileContext, token: any) {
+    const node = this.stack[this.stack.length - 1];
+    if (
+      (node.type === 'link' || node.type === 'definition')
+      && node.url === ''
+      && !state.urlSourceSpans.has(node)
+    ) {
+      state.urlSourceSpans.set(node, {
+        start: token.start.offset + 1,
+        end: token.end.offset - 1,
+      });
+    }
+  };
+
+  // The parser emits no destination token for `[label]()`. The confirmed
+  // resource token still gives us the accurate point immediately before its
+  // closing `)`. Preserve the standard handler's `inReference` cleanup too.
+  const onexitresource = function (this: CompileContext, token: any) {
+    this.setData('inReference');
+    const node = this.stack[this.stack.length - 1];
+    if (
+      node.type === 'link'
+      && node.url === ''
+      && !state.urlSourceSpans.has(node)
+    ) {
+      const emptyOffset = token.end.offset - 1;
+      state.urlSourceSpans.set(node, {
+        start: emptyOffset,
+        end: emptyOffset,
+      });
+    }
+  };
+
   return {
     enter: {
       data: onenterdata,
@@ -220,6 +281,8 @@ function recordingExtension(state: RecordingState) {
       characterReference: onenterConstruct,
       autolinkProtocol: onenterdata,
       autolinkEmail: onenterdata,
+      definitionDestinationString: onenterUrlDestination,
+      resourceDestinationString: onenterUrlDestination,
     },
     exit: {
       data(this: CompileContext, token: any) {
@@ -235,6 +298,11 @@ function recordingExtension(state: RecordingState) {
       lineEnding: onexitlineending,
       autolinkProtocol: onexitautolinkprotocol,
       autolinkEmail: onexitautolinkemail,
+      definitionDestinationString: onexitUrlDestination,
+      definitionDestinationLiteral: onexitDestinationLiteral,
+      resourceDestinationString: onexitUrlDestination,
+      resourceDestinationLiteral: onexitDestinationLiteral,
+      resource: onexitresource,
     },
   };
 }
@@ -379,6 +447,88 @@ function buildInlineCodeSegments(
     sourceEnd: interiorStart + valueSourceEnd,
     kind: 'literal',
   }];
+}
+
+function isEscapableUrlCharacter(char: number): boolean {
+  return (char >= 33 && char <= 47)
+    || (char >= 58 && char <= 64)
+    || (char >= 91 && char <= 96)
+    || (char >= 123 && char <= 126);
+}
+
+interface UrlSegments {
+  segments: MarkdownSourceMapSegment[]
+  emptyOffset?: number
+}
+
+function buildUrlSegments(
+  md: string,
+  node: { url: string },
+  bounds: SourceSpan,
+): UrlSegments | undefined {
+  if (bounds.start === bounds.end) {
+    return node.url === ''
+      ? { segments: [], emptyOffset: bounds.start }
+      : undefined;
+  }
+  const segments: MarkdownSourceMapSegment[] = [];
+  let value = '';
+  let valueOffset = 0;
+  const add = (sourceStart: number, sourceEnd: number, output: string, kind: MarkdownSourceMapSegment['kind']) => {
+    segments.push({
+      valueStart: valueOffset,
+      valueEnd: valueOffset + output.length,
+      sourceStart,
+      sourceEnd,
+      kind,
+    });
+    value += output;
+    valueOffset += output.length;
+  };
+  let literalStart = bounds.start;
+  const flushLiteral = (end: number): void => {
+    if (literalStart < end)
+      add(literalStart, end, md.slice(literalStart, end), 'literal');
+  };
+
+  for (let offset = bounds.start; offset < bounds.end;) {
+    const char = md.charCodeAt(offset);
+    if (char === 92 && offset + 1 < bounds.end && isEscapableUrlCharacter(md.charCodeAt(offset + 1))) {
+      flushLiteral(offset);
+      add(offset, offset + 2, md[offset + 1], 'escape');
+      offset += 2;
+      literalStart = offset;
+      continue;
+    }
+    if (char === 38) {
+      const semi = md.indexOf(';', offset + 1);
+      if (semi >= 0 && semi < bounds.end) {
+        const body = md.slice(offset + 1, semi);
+        let decoded: string | false;
+        if (body.startsWith('#')) {
+          const numeric = body.slice(1);
+          const radix = numeric.startsWith('x') || numeric.startsWith('X') ? 16 : 10;
+          decoded = decodeNumericCharacterReference(
+            radix === 16 ? numeric.slice(1) : numeric,
+            radix,
+          );
+        }
+        else {
+          decoded = decodeNamedCharacterReference(body);
+        }
+        if (decoded !== false) {
+          flushLiteral(offset);
+          add(offset, semi + 1, decoded, 'character-reference');
+          offset = semi + 1;
+          literalStart = offset;
+          continue;
+        }
+      }
+    }
+    offset++;
+  }
+  flushLiteral(bounds.end);
+  return value === node.url ? { segments } : undefined;
 }
 
 interface CodeSegments {
@@ -731,7 +881,8 @@ function findSegmentAt(
  * supported normalized-value fields back to the raw Markdown source.
  *
  * The AST is identical to {@link parseMd}. The current version maps
- * `text.value`, `inlineCode.value`, and block `code.value`.
+ * `text.value`, `inlineCode.value`, block `code.value`, and the `url` field
+ * of `link` and `definition` nodes.
  *
  * @param md - Markdown text.
  * @returns The positioned AST plus a source map.
@@ -750,6 +901,9 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     inlineCodeSegments: new WeakMap(),
     codeSegments: new WeakMap(),
     emptyCodeOffsets: new WeakMap(),
+    urlSegments: new WeakMap(),
+    emptyUrlOffsets: new WeakMap(),
+    urlSourceSpans: new WeakMap(),
   };
 
   const tree = fromMarkdown(md, {
@@ -788,6 +942,22 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     for (const child of node.children || []) recordCodeSegments(child);
   })(ast);
 
+  (function recordUrlSegments(node: any) {
+    if (
+      (node.type === 'link' || node.type === 'definition')
+      && typeof node.url === 'string'
+    ) {
+      const bounds = state.urlSourceSpans.get(node);
+      const segments = bounds ? buildUrlSegments(md, node, bounds) : undefined;
+      if (segments) {
+        state.urlSegments.set(node, segments.segments);
+        if (segments.emptyOffset !== undefined)
+          state.emptyUrlOffsets.set(node, segments.emptyOffset);
+      }
+    }
+    for (const child of node.children || []) recordUrlSegments(child);
+  })(ast);
+
   // Record every node that belongs to this document so `getRaw` /
   // `getSourceRange` can reject foreign nodes instead of silently slicing the
   // wrong Markdown with a stolen offset. For mapped text nodes, also snapshot
@@ -802,6 +972,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   // than slice with the stolen offset.
   const owned = new WeakSet<object>();
   const originalValues = new WeakMap<object, string>();
+  const originalUrls = new WeakMap<object, string>();
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
   (function register(node: any) {
     owned.add(node);
@@ -812,6 +983,8 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     ) {
       originalValues.set(node, node.value);
     }
+    if (state.urlSegments.has(node))
+      originalUrls.set(node, node.url);
     const position = (node as { position?: ParsedPosition }).position;
     if (position && position.start && position.end) {
       originalOffsets.set(node, [position.start.offset, position.end.offset]);
@@ -832,9 +1005,20 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     }
   };
 
+  const assertUrlUnmodified = (node: object): void => {
+    const original = originalUrls.get(node);
+    if (original !== undefined && (node as { url?: string }).url !== original) {
+      throw new SourceMapConsistencyError(
+        'the mapped url field has been modified since parsing; the source '
+        + 'map only covers the original parsed URL',
+      );
+    }
+  };
+
   const sourceMap: MarkdownSourceMap = {
     getRaw(
-      node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
+      node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode
+      | MarkdownLinkNode | MarkdownDefinitionNode,
     ): string {
       if (!owned.has(node as object)) {
         throw new SourceMapUnavailableError(
@@ -857,6 +1041,8 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       ) {
         assertUnmodified(node as object);
       }
+      if (state.urlSegments.has(node as object))
+        assertUrlUnmodified(node as object);
       // Non-mapped nodes: slice with the offsets snapshotted at parse time, so
       // post-parse mutation of `node.position` can't make `getRaw` return the
       // wrong source. A node with no snapshot never had a real source position.
@@ -1005,6 +1191,80 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       return {
         start: pointAtOffset(lineStarts, md, startOffset),
         end: pointAtOffset(lineStarts, md, endOffset),
+      };
+    },
+
+    getFieldSourceRange(
+      node: MarkdownLinkNode | MarkdownDefinitionNode,
+      field: 'url',
+      valueStart: number,
+      valueEnd: number,
+    ): ParsedPosition {
+      if (!owned.has(node as object)) {
+        throw new SourceMapUnavailableError(
+          'getFieldSourceRange: the given node does not belong to this document',
+        );
+      }
+      if (field !== 'url') {
+        throw new SourceMapUnavailableError(
+          `getFieldSourceRange: no source mapping is available for field ${field}`,
+        );
+      }
+      if (!Number.isInteger(valueStart) || !Number.isInteger(valueEnd)) {
+        throw new RangeError(
+          'getFieldSourceRange: valueStart and valueEnd must be finite integers',
+        );
+      }
+      const segs = state.urlSegments.get(node as object);
+      if (!segs) {
+        throw new SourceMapUnavailableError(
+          'getFieldSourceRange: no URL source mapping is available for the given node',
+        );
+      }
+      assertUrlUnmodified(node as object);
+      if (valueStart < 0 || valueEnd > node.url.length || valueStart > valueEnd) {
+        throw new RangeError(
+          `getFieldSourceRange: value range [${valueStart}, ${valueEnd}) is out of bounds`,
+        );
+      }
+      const sourceOffsetAt = (valueIndex: number, pastUnit: boolean): number => {
+        const seg = findSegmentAt(segs, valueIndex);
+        if (!seg) {
+          if (valueIndex === node.url.length)
+            return segs[segs.length - 1].sourceEnd;
+          throw new RangeError('getFieldSourceRange: range is not fully mapped');
+        }
+        if (seg.kind !== 'literal')
+          return pastUnit ? seg.sourceEnd : seg.sourceStart;
+        return seg.sourceStart + (pastUnit ? valueIndex + 1 : valueIndex) - seg.valueStart;
+      };
+      if (valueStart === valueEnd) {
+        const pointRange = (offset: number): ParsedPosition => {
+          const sourcePoint = pointAtOffset(lineStarts, md, offset);
+          return { start: sourcePoint, end: sourcePoint };
+        };
+        if (segs.length === 0) {
+          const emptyOffset = state.emptyUrlOffsets.get(node as object);
+          if (node.url.length === 0 && valueStart === 0 && emptyOffset !== undefined) {
+            return pointRange(emptyOffset);
+          }
+          throw new RangeError('getFieldSourceRange: range is not fully mapped');
+        }
+        if (valueStart === 0)
+          return pointRange(segs[0].sourceStart);
+        if (valueStart === node.url.length)
+          return pointRange(segs[segs.length - 1].sourceEnd);
+        const seg = findSegmentAt(segs, valueStart);
+        if (seg && valueStart === seg.valueStart)
+          return pointRange(seg.sourceStart);
+        if (seg?.kind === 'literal') {
+          return pointRange(seg.sourceStart + valueStart - seg.valueStart);
+        }
+        throw new RangeError('getFieldSourceRange: empty range falls inside an atomic construct');
+      }
+      return {
+        start: pointAtOffset(lineStarts, md, sourceOffsetAt(valueStart, false)),
+        end: pointAtOffset(lineStarts, md, sourceOffsetAt(valueEnd - 1, true)),
       };
     },
   };

@@ -23,6 +23,12 @@ const codeRange = doc.sourceMap.getSourceRange(
   0,
   1,
 );
+const urlRange = doc.sourceMap.getFieldSourceRange(
+  doc.ast.children[0] as parser.MarkdownLinkNode,
+  'url',
+  0,
+  1,
+);
 const consistency = new parser.SourceMapConsistencyError();
 const asRangeError: RangeError = new parser.SourceMapUnavailableError();
 const isSourceMapError: boolean = consistency instanceof parser.SourceMapError;
@@ -32,6 +38,7 @@ void inlineCodeRaw;
 void range;
 void inlineCodeRange;
 void codeRange;
+void urlRange;
 void codeRaw;
 void consistency;
 void asRangeError;

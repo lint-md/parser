@@ -103,6 +103,9 @@ export type MarkdownListItemNode = import('mdast').ListItem;
 export type MarkdownLinkNode = import('mdast').Link;
 
 /** @public */
+export type MarkdownDefinitionNode = import('mdast').Definition;
+
+/** @public */
 export type MarkdownTextNode = import('mdast').Text;
 
 /** @public */

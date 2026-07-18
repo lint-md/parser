@@ -86,14 +86,14 @@ sourceMap.getRaw(textNode); // 'A&amp;B'
 
 ### 契约
 
-- `getSourceRange(node, valueStart, valueEnd)` 的索引与 JavaScript 字符串下标一致，范围均为半开区间 `[start, end)`；当前支持 `text.value`、`inlineCode.value` 与 block `code.value`。
+- `getSourceRange(node, valueStart, valueEnd)` 的索引与 JavaScript 字符串下标一致，范围均为半开区间 `[start, end)`；当前支持 `text.value`、`inlineCode.value` 与 block `code.value`。`getFieldSourceRange(node, 'url', valueStart, valueEnd)` 当前支持 inline resource link 与 definition 的 destination；autolink 和 GFM autolink literal 暂不包含。
 - 映射覆盖受支持节点的整个 `value`，segment 之间无空洞、无重叠。
 - `getSourceRange(node, 0, node.value.length)` 覆盖该节点 value 的完整原始来源范围。
 - 错误分为三条路径，专属错误均继承 `RangeError`（现有 `catch (RangeError)` 不受影响），并带稳定的 `code` 字段；当跨边界传递时（如跨 CJS/ESM 实例、重复安装、worker 边界），只要错误被显式序列化且 `code` 字段被保留，即可用 `code` 而非 `instanceof` 判断（类本身无法保证任意序列化机制一定保留自定义属性）：
-  - `SourceMapConsistencyError`（`ERR_SOURCE_MAP_CONSISTENCY`）：已建立映射的 `text`、`inlineCode` 或 `code` 节点在解析后被修改——映射只对原始解析值有效，重新赋入相同内容的 `value` 不受影响；
-  - `SourceMapUnavailableError`（`ERR_SOURCE_MAP_UNAVAILABLE`）：节点属于其他文档、由插件生成或在解析后加入、或不是受支持的 `text` / `inlineCode` / `code` 节点——不会伪造位置；
+  - `SourceMapConsistencyError`（`ERR_SOURCE_MAP_CONSISTENCY`）：已建立映射的 `text`、`inlineCode`、`code` 节点的 `value`，或 `link`、`definition` 节点的 `url` 在解析后被修改——映射只对原始解析字段有效，重新赋入相同内容不受影响；
+  - `SourceMapUnavailableError`（`ERR_SOURCE_MAP_UNAVAILABLE`）：节点属于其他文档、由插件生成或在解析后加入、或不是受支持的节点或字段——不会伪造位置；
   - 普通 `RangeError`：`valueStart` / `valueEnd` 非法（非有限整数、越界、倒置，或空区间落在原子构造内部）。
-- 当前版本覆盖 `text.value`、`inlineCode.value` 与 `code.value`；其余字段（`link.url` 等）后续版本补充。
+- 当前版本覆盖 `text.value`、`inlineCode.value`、`code.value`、inline resource link 的 `url` 与 definition 的 `url`；其余字段后续版本补充。
 
 ## 开发验证
 
