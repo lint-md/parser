@@ -25,7 +25,7 @@ Treat a version change to any of these as a parser behavior upgrade:
 - `remark-frontmatter`
 - `remark-directive`
 - `remark-math`
-- any transitive `micromark-*` package pulled in by the above
+- `micromark` and any transitive `micromark-*` package pulled in by the above
 
 Note that several of these are pinned to exact versions on purpose (e.g.
 `mdast-util-from-markdown`, `decode-named-character-reference`,
