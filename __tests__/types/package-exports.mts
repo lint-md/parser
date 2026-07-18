@@ -7,7 +7,6 @@ import {
   SourceMapConsistencyError,
   SourceMapUnavailableError,
   type SourceMapErrorCode,
-  type MarkdownSourceMapSegment,
   type ParsedMarkdownDocument,
   type PositionedMarkdownRoot,
   type PositionedMarkdownNode,
@@ -25,7 +24,11 @@ const markdown: string = revertMdAstNode(root);
 const same: boolean = stringifyMdAst === revertMdAstNode;
 
 const doc: ParsedMarkdownDocument = parseMdWithSourceMap('# ESM');
-const segKind: MarkdownSourceMapSegment['kind'] = 'character-reference';
+
+// @ts-expect-error segment implementation details are intentionally internal.
+type HiddenSegment = import('@lint-md/parser').MarkdownSourceMapSegment;
+// @ts-expect-error segment implementation details are intentionally internal.
+type HiddenSegmentKind = import('@lint-md/parser').SourceMapSegmentKind;
 
 const consistency = new SourceMapConsistencyError();
 const unavailable = new SourceMapUnavailableError();
@@ -40,7 +43,6 @@ void nodeOffset;
 void markdown;
 void same;
 void doc;
-void segKind;
 void consistency;
 void unavailable;
 void asRangeError;
