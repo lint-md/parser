@@ -81,8 +81,8 @@ export type MarkdownRoot = Root;
 
 // @public
 export interface MarkdownSourceMap {
-    getRaw(node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode): string;
-    getSourceRange(node: MarkdownTextNode | MarkdownInlineCodeNode, valueStart: number, valueEnd: number): ParsedPosition;
+    getRaw(node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode): string;
+    getSourceRange(node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode, valueStart: number, valueEnd: number): ParsedPosition;
 }
 
 // @public (undocumented)

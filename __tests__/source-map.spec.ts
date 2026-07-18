@@ -25,6 +25,17 @@ function inlineCodeNodes(root: any): any[] {
   return out;
 }
 
+/** Collect every block `code` node in document order. */
+function codeNodes(root: any): any[] {
+  const out: any[] = [];
+  (function walk(n: any) {
+    if (n.type === 'code')
+      out.push(n);
+    for (const c of n.children || []) walk(c);
+  })(root);
+  return out;
+}
+
 describe('parseMdWithSourceMap: text.value → raw source', () => {
   test('backslash escape \\( maps to a 2-char source span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('\\(');
@@ -290,6 +301,177 @@ describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
     expect(() => sourceMap.getRaw(node)).toThrow(SourceMapConsistencyError);
   });
 });
+describe('parseMdWithSourceMap: code.value → raw source', () => {
+  function expectPerCodeUnitRanges(
+    md: string,
+    node: any,
+    sourceMap: any,
+  ): void {
+    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
+    let previousStart = whole.start.offset;
+    let previousEnd = whole.start.offset;
+    for (let i = 0; i < node.value.length; i++) {
+      const range = sourceMap.getSourceRange(node, i, i + 1);
+      expect(range.start.offset).toBeGreaterThanOrEqual(0);
+      expect(range.end.offset).toBeGreaterThanOrEqual(range.start.offset);
+      expect(range.end.offset).toBeLessThanOrEqual(md.length);
+      expect(range.start.offset).toBeGreaterThanOrEqual(whole.start.offset);
+      expect(range.end.offset).toBeLessThanOrEqual(whole.end.offset);
+      expect(range.start.offset).toBeGreaterThanOrEqual(previousStart);
+      expect(range.end.offset).toBeGreaterThanOrEqual(previousEnd);
+      previousStart = range.start.offset;
+      previousEnd = range.end.offset;
+    }
+  }
+
+  test.each(['\n', '\r', '\r\n'])(
+    'maps fenced code with %p line endings',
+    (lineEnding) => {
+      const md = `\`\`\`ts meta${lineEnding}a${lineEnding}b${lineEnding}\`\`\``;
+      const { ast, sourceMap } = parseMdWithSourceMap(md);
+      const node = codeNodes(ast)[0];
+      expect(node.value).toBe(`a${lineEnding}b`);
+      expect(sourceMap.getRaw(node)).toBe(md);
+      const whole = sourceMap.getSourceRange(node, 0, node.value.length);
+      expect(whole.start.offset).toBe(
+        md.indexOf('a', md.indexOf(lineEnding) + lineEnding.length),
+      );
+      expect(whole.end.offset).toBe(md.indexOf('b') + 1);
+      expectPerCodeUnitRanges(md, node, sourceMap);
+    },
+  );
+
+  test('maps indented code line by line, including a blank line', () => {
+    const md = '    a\r\n\r\n    b\r\n';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('a\r\n\r\nb');
+    expect(sourceMap.getRaw(node)).toBe('    a\r\n\r\n    b');
+    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(whole.start.offset).toBe(md.indexOf('a'));
+    expect(whole.end.offset).toBe(md.indexOf('b') + 1);
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
+  test.each(['\t', ' \t', '  \t', '   \t', '\t\t'])(
+    'maps a tab-indented code line with prefix %p',
+    (indentation) => {
+      const md = indentation + 'a\n';
+      const { ast, sourceMap } = parseMdWithSourceMap(md);
+      const node = codeNodes(ast)[0];
+      const value = indentation === '\t\t' ? '\ta' : 'a';
+      expect(node.value).toBe(value);
+      const range = sourceMap.getSourceRange(node, 0, node.value.length);
+      expect(md.slice(range.start.offset, range.end.offset)).toBe(value);
+    },
+  );
+
+  test('maps tilde-fenced code', () => {
+    const md = '~~~\r\nvalue\r\n~~~';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('value');
+    expect(sourceMap.getRaw(node)).toBe(md);
+    expect(sourceMap.getSourceRange(node, 0, node.value.length)).toEqual({
+      start: { line: 2, column: 1, offset: 5 },
+      end: { line: 2, column: 6, offset: 10 },
+    });
+  });
+
+  test('maps fenced code inside a blockquote', () => {
+    const md = '> ```js\n> const x = 1\n> ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('const x = 1');
+    const range = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toContain('const x = 1');
+  });
+
+  test('maps indented code inside a blockquote', () => {
+    const md = '>     indented\n>     code';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('indented\ncode');
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
+  test('maps fenced code nested in a list', () => {
+    const md = '- item\n    ```\n    value\n    ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('value');
+    const range = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toBe('value');
+  });
+
+  test('maps multi-line indented code inside a list', () => {
+    const md = '- Foo\n\n      bar\n      baz';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('bar\nbaz');
+    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(whole.start.offset).toBe(md.indexOf('bar'));
+    expect(whole.end.offset).toBe(md.indexOf('baz') + 3);
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
+  test('maps multi-line indented code inside a blockquote list', () => {
+    const md = '> - Foo\n>\n>       bar\n>       baz';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('bar\nbaz');
+    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(whole.start.offset).toBe(md.indexOf('bar'));
+    expect(whole.end.offset).toBe(md.indexOf('baz') + 3);
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
+  test('maps empty fenced code inside a blockquote', () => {
+    const md = '> ```\n> ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('');
+    const point = sourceMap.getSourceRange(node, 0, 0);
+    expect(point.start.offset).toBe(md.lastIndexOf('```'));
+  });
+
+  test('maps empty fenced code inside a list', () => {
+    const md = '- item\n    ```\n    ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    const point = sourceMap.getSourceRange(node, 0, 0);
+    expect(point.start.offset).toBe(md.lastIndexOf('```'));
+  });
+
+  test('excludes fenced delimiters and their indentation from code ranges', () => {
+    const md = '  ```\n  a\n  b\n  ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('a\nb');
+    expect(sourceMap.getRaw(node)).toBe('```\n  a\n  b\n  ```');
+    expect(sourceMap.getSourceRange(node, 0, 1).start.offset).toBe(md.indexOf('a'));
+    expect(sourceMap.getSourceRange(node, 2, 3).end.offset).toBe(md.indexOf('b') + 1);
+  });
+
+  test('maps an empty fenced code value to its content boundary', () => {
+    const md = '```\n\n```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('');
+    expect(sourceMap.getRaw(node)).toBe(md);
+    expect(sourceMap.getSourceRange(node, 0, 0).start.offset).toBe(4);
+  });
+
+  test('rejects a code value modified after parsing', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('```\nvalue\n```');
+    const node = codeNodes(ast)[0];
+    node.value = 'changed';
+    expect(() => sourceMap.getSourceRange(node, 0, 1)).toThrow(
+      SourceMapConsistencyError,
+    );
+    expect(() => sourceMap.getRaw(node)).toThrow(SourceMapConsistencyError);
+  });
+});
 
 describe('parseMdWithSourceMap: contract', () => {
   test('getSourceRange start..end covers the whole text node value', () => {
@@ -507,7 +689,6 @@ describe('parseMdWithSourceMap: contract', () => {
     }
   });
 });
-
 
 describe('parseMdWithSourceMap: split and unmapped nodes', () => {
   test('text nodes split around a www autolink each map to their own raw span', () => {
@@ -728,6 +909,8 @@ describe('parseMd vs parseMdWithSourceMap: AST parity corpus', () => {
     '`code with &lt; tag` and > quote',
     'text [a](<b &amp; c>) end',
     'pre\n```js\nconst x = 1 &amp; 2;\n```\npost',
+    '~~~\r\na\r\n~~~',
+    '    a\n\n    b\n',
     '&#0;&#128;&#xFDD0; and &amp;amp;',
     'A&#x1F600;B',
   ];

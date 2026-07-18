@@ -9,9 +9,17 @@ const raw: string = doc.sourceMap.getRaw(doc.ast.children[0]);
 const inlineCodeRaw: string = doc.sourceMap.getRaw(
   doc.ast.children[0] as parser.MarkdownInlineCodeNode,
 );
+const codeRaw: string = doc.sourceMap.getRaw(
+  doc.ast.children[0] as parser.MarkdownCodeNode,
+);
 const range = doc.sourceMap.getSourceRange(doc.ast.children[0] as parser.MarkdownTextNode, 0, 1);
 const inlineCodeRange = doc.sourceMap.getSourceRange(
   doc.ast.children[0] as parser.MarkdownInlineCodeNode,
+  0,
+  1,
+);
+const codeRange = doc.sourceMap.getSourceRange(
+  doc.ast.children[0] as parser.MarkdownCodeNode,
   0,
   1,
 );
@@ -23,6 +31,8 @@ void raw;
 void inlineCodeRaw;
 void range;
 void inlineCodeRange;
+void codeRange;
+void codeRaw;
 void consistency;
 void asRangeError;
 void isSourceMapError;

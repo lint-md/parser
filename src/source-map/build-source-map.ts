@@ -3,6 +3,7 @@ import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-c
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
 import type { Root } from 'mdast';
 import type {
+  MarkdownCodeNode,
   MarkdownInlineCodeNode,
   MarkdownNode,
   MarkdownTextNode,
@@ -44,6 +45,10 @@ interface RecordingState {
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** inlineCode node -> value segments (see buildInlineCodeSegments). */
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  /** code node -> value segments (see buildCodeSegments). */
+  codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  /** code node -> source point for an empty value. */
+  emptyCodeOffsets: WeakMap<object, number>
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -376,6 +381,322 @@ function buildInlineCodeSegments(
   }];
 }
 
+interface CodeSegments {
+  segments: MarkdownSourceMapSegment[]
+  emptyOffset?: number
+}
+
+interface SourceSpan {
+  start: number
+  end: number
+}
+
+function lineEnd(md: string, start: number, limit: number): number {
+  let offset = start;
+  while (offset < limit) {
+    const char = md.charCodeAt(offset);
+    if (char === 13)
+      return offset + (md.charCodeAt(offset + 1) === 10 ? 2 : 1);
+    if (char === 10)
+      return offset + 1;
+    offset++;
+  }
+  return limit;
+}
+
+function lineStart(md: string, start: number, end: number): number {
+  let offset = end;
+  while (offset > start) {
+    const char = md.charCodeAt(offset - 1);
+    if (char === 10 || char === 13)
+      break;
+    offset--;
+  }
+  return offset;
+}
+
+function lineContentEnd(md: string, start: number, end: number): number {
+  if (end <= start)
+    return end;
+  if (md.charCodeAt(end - 1) === 10) {
+    return end - (md.charCodeAt(end - 2) === 13 ? 2 : 1);
+  }
+  return md.charCodeAt(end - 1) === 13 ? end - 1 : end;
+}
+
+function blockQuoteDepth(md: string, start: number, end: number): number {
+  let depth = 0;
+  for (let offset = start; offset < end; offset++) {
+    if (md.charCodeAt(offset) === 62 /* > */)
+      depth++;
+  }
+  return depth;
+}
+
+function skipBlockQuoteMarkers(
+  md: string,
+  start: number,
+  end: number,
+  depth: number,
+): number | undefined {
+  let offset = start;
+  for (let index = 0; index < depth; index++) {
+    while (offset < end && (md.charCodeAt(offset) === 32 || md.charCodeAt(offset) === 9)) {
+      offset++;
+    }
+    if (md.charCodeAt(offset) !== 62)
+      return undefined;
+    offset++;
+    if (md.charCodeAt(offset) === 32)
+      offset++;
+  }
+  return offset;
+}
+
+function fencedIndentation(
+  md: string,
+  lineStartOffset: number,
+  fenceStart: number,
+  quoteDepth: number,
+): number {
+  if (quoteDepth === 0)
+    return fenceStart - lineStartOffset;
+  let offset = fenceStart - 1;
+  while (offset >= lineStartOffset && md.charCodeAt(offset) !== 62) offset--;
+  if (offset < lineStartOffset)
+    return -1;
+  offset++;
+  if (md.charCodeAt(offset) === 32)
+    offset++;
+  let indentation = 0;
+  while (offset < fenceStart && md.charCodeAt(offset) === 32) {
+    offset++;
+    indentation++;
+  }
+  return offset === fenceStart ? indentation : -1;
+}
+
+function trimTrailingLineEnding(md: string, spans: SourceSpan[]): void {
+  const last = spans[spans.length - 1];
+  if (!last)
+    return;
+  if (md.charCodeAt(last.end - 1) === 10) {
+    last.end -= md.charCodeAt(last.end - 2) === 13 ? 2 : 1;
+  }
+  else if (md.charCodeAt(last.end - 1) === 13) {
+    last.end--;
+  }
+  if (last.start === last.end)
+    spans.pop();
+}
+
+function segmentsFromSpans(
+  md: string,
+  spans: SourceSpan[],
+  value: string,
+): MarkdownSourceMapSegment[] | undefined {
+  const segments: MarkdownSourceMapSegment[] = [];
+  let valueOffset = 0;
+  let sourceValue = '';
+  for (const span of spans) {
+    if (span.start >= span.end)
+      continue;
+    const length = span.end - span.start;
+    sourceValue += md.slice(span.start, span.end);
+    const previous = segments[segments.length - 1];
+    if (previous && previous.sourceEnd === span.start && previous.valueEnd === valueOffset) {
+      previous.sourceEnd = span.end;
+      previous.valueEnd += length;
+    }
+    else {
+      segments.push({
+        valueStart: valueOffset,
+        valueEnd: valueOffset + length,
+        sourceStart: span.start,
+        sourceEnd: span.end,
+        kind: 'literal',
+      });
+    }
+    valueOffset += length;
+  }
+  return valueOffset === value.length && sourceValue === value
+    ? segments
+    : undefined;
+}
+
+function buildFencedCodeSegments(
+  md: string,
+  node: { value: string; position?: ParsedPosition },
+): CodeSegments | undefined {
+  const position = node.position;
+  if (!position)
+    return undefined;
+  const start = position.start.offset;
+  const end = position.end.offset;
+  const marker = md.charCodeAt(start);
+  if (marker !== 96 && marker !== 126)
+    return undefined;
+
+  let fenceLength = 0;
+  while (md.charCodeAt(start + fenceLength) === marker) fenceLength++;
+  if (fenceLength < 3)
+    return undefined;
+
+  const physicalLineStart = lineStart(md, 0, start);
+  const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
+  const openingIndent = fencedIndentation(md, physicalLineStart, start, quoteDepth);
+  if (openingIndent < 0)
+    return undefined;
+  const openingLineEnd = lineEnd(md, start, end);
+  let contentEnd = end;
+  let hasClosingFence = false;
+  const closingLineStart = lineStart(md, start, end);
+  const closingStart = quoteDepth === 0
+    ? closingLineStart
+    : skipBlockQuoteMarkers(md, closingLineStart, end, quoteDepth);
+  if (closingStart === undefined)
+    return undefined;
+  let closingFenceStart = closingStart;
+  let removedIndentation = 0;
+  while (
+    removedIndentation < openingIndent
+    && md.charCodeAt(closingFenceStart) === 32
+  ) {
+    closingFenceStart++;
+    removedIndentation++;
+  }
+  const closing = md.slice(closingFenceStart, end);
+  const closingMatch = /^( {0,3})(`+|~+)[ \t]*$/.exec(closing);
+  if (
+    closingMatch
+    && closingMatch[2].charCodeAt(0) === marker
+    && closingMatch[2].length >= fenceLength
+  ) {
+    contentEnd = closingLineStart;
+    hasClosingFence = true;
+  }
+
+  const spans: SourceSpan[] = [];
+  let offset = openingLineEnd;
+  while (offset < contentEnd) {
+    const endOfLine = lineEnd(md, offset, contentEnd);
+    let contentStart = quoteDepth === 0
+      ? offset
+      : skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth);
+    if (contentStart === undefined)
+      return undefined;
+    let removed = 0;
+    while (removed < openingIndent && md.charCodeAt(contentStart) === 32) {
+      contentStart++;
+      removed++;
+    }
+    spans.push({ start: contentStart, end: endOfLine });
+    offset = endOfLine;
+  }
+  const emptyOffset = spans[0]?.start
+    ?? (hasClosingFence ? closingFenceStart : openingLineEnd);
+  trimTrailingLineEnding(md, spans);
+  const segments = segmentsFromSpans(md, spans, node.value);
+  if (!segments)
+    return undefined;
+  return {
+    segments,
+    emptyOffset,
+  };
+}
+
+function buildIndentedCodeSegments(
+  md: string,
+  node: { value: string; position?: ParsedPosition },
+): CodeSegments | undefined {
+  const position = node.position;
+  if (!position)
+    return undefined;
+  const start = position.start.offset;
+  const end = position.end.offset;
+  const physicalLineStart = lineStart(md, 0, start);
+  const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
+  const initialContentStart = quoteDepth === 0
+    ? physicalLineStart
+    : skipBlockQuoteMarkers(md, physicalLineStart, start, quoteDepth);
+  if (initialContentStart === undefined)
+    return undefined;
+  const listContinuationIndent = start - initialContentStart;
+  const spans: SourceSpan[] = [];
+  let offset = start;
+  let firstLine = true;
+  while (offset < end) {
+    const endOfLine = lineEnd(md, offset, end);
+    let contentStart = offset;
+    if (!firstLine && quoteDepth > 0) {
+      const afterMarkers = skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth);
+      if (afterMarkers === undefined)
+        return undefined;
+      contentStart = afterMarkers;
+    }
+    if (!firstLine && listContinuationIndent > 0) {
+      let removedContinuation = 0;
+      while (
+        removedContinuation < listContinuationIndent
+        && md.charCodeAt(contentStart) === 32
+      ) {
+        contentStart++;
+        removedContinuation++;
+      }
+      if (
+        removedContinuation !== listContinuationIndent
+        && contentStart < lineContentEnd(md, offset, endOfLine)
+      ) {
+        return undefined;
+      }
+    }
+    let indentation = 0;
+    while (indentation < 4) {
+      const char = md.charCodeAt(contentStart);
+      if (char === 32) {
+        contentStart++;
+        indentation++;
+      }
+      else if (char === 9) {
+        contentStart++;
+        indentation += 4 - (indentation % 4);
+      }
+      else {
+        break;
+      }
+    }
+    // A non-blank line with fewer than four indentation columns needs
+    // parser-specific virtual-space accounting. Do not fabricate it.
+    if (indentation < 4 && contentStart < lineContentEnd(md, offset, endOfLine))
+      return undefined;
+    spans.push({ start: contentStart, end: endOfLine });
+    offset = endOfLine;
+    firstLine = false;
+  }
+  trimTrailingLineEnding(md, spans);
+  const segments = segmentsFromSpans(md, spans, node.value);
+  if (!segments)
+    return undefined;
+  return {
+    segments,
+    emptyOffset: start + Math.min(4, end - start),
+  };
+}
+
+function buildCodeSegments(
+  md: string,
+  node: { value: string; position?: ParsedPosition },
+): CodeSegments | undefined {
+  const position = node.position;
+  if (!position)
+    return undefined;
+  const start = position.start.offset;
+  const marker = md.charCodeAt(start);
+  return marker === 96 || marker === 126
+    ? buildFencedCodeSegments(md, node)
+    : buildIndentedCodeSegments(md, node);
+}
+
 /**
  * Find the segment covering `valueIndex`, or undefined.
  *
@@ -407,10 +728,10 @@ function findSegmentAt(
 
 /**
  * Parse Markdown and additionally produce a sidecar source map that resolves
- * each `text` node's normalized `value` back to the raw Markdown source.
+ * supported normalized-value fields back to the raw Markdown source.
  *
- * The AST is identical to {@link parseMd}; only `text` nodes carry a mapping
- * in the first version.
+ * The AST is identical to {@link parseMd}. The current version maps
+ * `text.value`, `inlineCode.value`, and block `code.value`.
  *
  * @param md - Markdown text.
  * @returns The positioned AST plus a source map.
@@ -427,6 +748,8 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     fullSpan: false,
     segments: new WeakMap(),
     inlineCodeSegments: new WeakMap(),
+    codeSegments: new WeakMap(),
+    emptyCodeOffsets: new WeakMap(),
   };
 
   const tree = fromMarkdown(md, {
@@ -452,6 +775,19 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     for (const child of node.children || []) recordInlineCodeSegments(child);
   })(ast);
 
+  (function recordCodeSegments(node: any) {
+    if (node.type === 'code' && typeof node.value === 'string') {
+      const mapping = buildCodeSegments(md, node);
+      if (mapping) {
+        state.codeSegments.set(node, mapping.segments);
+        if (mapping.emptyOffset !== undefined) {
+          state.emptyCodeOffsets.set(node, mapping.emptyOffset);
+        }
+      }
+    }
+    for (const child of node.children || []) recordCodeSegments(child);
+  })(ast);
+
   // Record every node that belongs to this document so `getRaw` /
   // `getSourceRange` can reject foreign nodes instead of silently slicing the
   // wrong Markdown with a stolen offset. For mapped text nodes, also snapshot
@@ -469,7 +805,11 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
   (function register(node: any) {
     owned.add(node);
-    if (state.segments.has(node) || state.inlineCodeSegments.has(node)) {
+    if (
+      state.segments.has(node)
+      || state.inlineCodeSegments.has(node)
+      || state.codeSegments.has(node)
+    ) {
       originalValues.set(node, node.value);
     }
     const position = (node as { position?: ParsedPosition }).position;
@@ -493,7 +833,9 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   };
 
   const sourceMap: MarkdownSourceMap = {
-    getRaw(node: MarkdownNode): string {
+    getRaw(
+      node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
+    ): string {
       if (!owned.has(node as object)) {
         throw new SourceMapUnavailableError(
           'getRaw: the given node does not belong to this document; pass a '
@@ -509,7 +851,10 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         // positions the text node one code unit earlier).
         return md.slice(segs[0].sourceStart, segs[segs.length - 1].sourceEnd);
       }
-      if (state.inlineCodeSegments.has(node as object)) {
+      if (
+        state.inlineCodeSegments.has(node as object)
+        || state.codeSegments.has(node as object)
+      ) {
         assertUnmodified(node as object);
       }
       // Non-mapped nodes: slice with the offsets snapshotted at parse time, so
@@ -526,7 +871,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     },
 
     getSourceRange(
-      node: MarkdownTextNode | MarkdownInlineCodeNode,
+      node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
       valueStart: number,
       valueEnd: number,
     ): ParsedPosition {
@@ -549,12 +894,13 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         );
       }
       const segs = state.segments.get(node as object)
-        || state.inlineCodeSegments.get(node as object);
+        || state.inlineCodeSegments.get(node as object)
+        || state.codeSegments.get(node as object);
       if (!segs) {
         throw new SourceMapUnavailableError(
           'getSourceRange: no source mapping is available for the given '
             + 'node; it was generated, added after parsing, or is not a '
-            + 'supported text or inlineCode node',
+            + 'supported text, inlineCode, or code node',
         );
       }
       assertUnmodified(node as object);
@@ -566,6 +912,17 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         throw new RangeError(
           `getSourceRange: value range [${valueStart}, ${valueEnd}) is out of `
             + `bounds for a mapped node of length ${node.value.length}`,
+        );
+      }
+
+      if (segs.length === 0) {
+        const emptyOffset = state.emptyCodeOffsets.get(node as object);
+        if (node.value.length === 0 && valueStart === 0 && valueEnd === 0 && emptyOffset !== undefined) {
+          const sourcePoint = pointAtOffset(lineStarts, md, emptyOffset);
+          return { start: sourcePoint, end: sourcePoint };
+        }
+        throw new RangeError(
+          'getSourceRange: value range is not fully covered by the source map',
         );
       }
 
