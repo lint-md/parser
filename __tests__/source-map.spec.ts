@@ -471,6 +471,22 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expect(sourceMap.getSourceRange(node, 0, 0).start.offset).toBe(4);
   });
 
+  test.each([
+    ['```', 3],
+    ['~~~', 3],
+    ['```   ', 6],
+    ['```\n', 4],
+    ['```\r', 4],
+    ['```\r\n', 5],
+  ])('maps an unclosed empty fence to EOF: %p', (md, expectedOffset) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('');
+    const point = sourceMap.getSourceRange(node, 0, 0);
+    expect(point.start.offset).toBe(expectedOffset);
+    expect(point.end.offset).toBe(expectedOffset);
+  });
+
   test('rejects a code value modified after parsing', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('```\nvalue\n```');
     const node = codeNodes(ast)[0];
