@@ -81,15 +81,6 @@ export interface MarkdownSourceMap {
     getSourceRange(node: MarkdownTextNode, valueStart: number, valueEnd: number): ParsedPosition;
 }
 
-// @public
-export interface MarkdownSourceMapSegment {
-    kind: SourceMapSegmentKind;
-    sourceEnd: number;
-    sourceStart: number;
-    valueEnd: number;
-    valueStart: number;
-}
-
 // @public (undocumented)
 export interface MarkdownTextDirective extends Parent, MarkdownDirectiveFields {
     // (undocumented)
@@ -160,9 +151,6 @@ export class SourceMapError extends RangeError {
 
 // @public
 export type SourceMapErrorCode = 'ERR_SOURCE_MAP_CONSISTENCY' | 'ERR_SOURCE_MAP_UNAVAILABLE';
-
-// @public
-export type SourceMapSegmentKind = 'literal' | 'escape' | 'character-reference' | 'normalization' | 'generated';
 
 // @public
 export class SourceMapUnavailableError extends SourceMapError {

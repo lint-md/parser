@@ -4,14 +4,13 @@ import type { MarkdownNode, MarkdownTextNode, ParsedPosition } from '../types';
  * The kind of transformation the parser applied to turn a slice of the raw
  * Markdown source into the corresponding slice of a node's normalized value.
  *
- * @public
+ * @internal
  */
 export type SourceMapSegmentKind =
   | 'literal'
   | 'escape'
   | 'character-reference'
-  | 'normalization'
-  | 'generated';
+  | 'normalization';
 
 /**
  * A single contiguous mapping between a half-open range of a node's
@@ -21,7 +20,7 @@ export type SourceMapSegmentKind =
  * Adjacent segments never overlap and never leave gaps across the whole
  * `node.value`.
  *
- * @public
+ * @internal
  */
 export interface MarkdownSourceMapSegment {
   /** Half-open interval within `node.value` (JavaScript string indices). */
@@ -44,9 +43,6 @@ export interface MarkdownSourceMapSegment {
    * - `normalization`: the parser replaced an illegal code point with the
    *   Unicode replacement character (U+FFFD), or otherwise normalized the
    *   slice without decoding an entity.
-   * - `generated`: the node (or slice) has no corresponding original source
-   *   (e.g. synthesized by a plugin). Such slices MUST NOT claim a real
-   *   source position.
    */
   kind: SourceMapSegmentKind
 }

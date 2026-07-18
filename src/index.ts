@@ -8,4 +8,7 @@ export {
 } from './source-map/errors';
 
 export * from './types';
-export * from './source-map/types';
+export type {
+  MarkdownSourceMap,
+  ParsedMarkdownDocument,
+} from './source-map/types';
