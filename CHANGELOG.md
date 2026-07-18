@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `MarkdownSourceMap.getSourceRange()` 新增对 `inlineCode.value` 的源码映射支持，覆盖多反引号定界符、首尾 padding 规则以及 CR、LF、CRLF；同时新增公开类型 `MarkdownInlineCodeNode`（#66）
+
 ### Fixed
 
 - 修复转义字符后紧跟 CRLF 时，换行 source-map segment 错误继承 `escape` kind，导致 `\r` 与 `\n` 被作为同一原子段映射（两者映射到整个 `\r\n` 且重叠、CR/LF 之间的空区间误抛 `RangeError`）的问题；换行现按逐 UTF-16 code unit 正确映射（#57）

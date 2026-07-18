@@ -6,13 +6,23 @@ type HiddenSegment = parser.MarkdownSourceMapSegment;
 // @ts-expect-error segment implementation details are intentionally internal.
 type HiddenSegmentKind = parser.SourceMapSegmentKind;
 const raw: string = doc.sourceMap.getRaw(doc.ast.children[0]);
+const inlineCodeRaw: string = doc.sourceMap.getRaw(
+  doc.ast.children[0] as parser.MarkdownInlineCodeNode,
+);
 const range = doc.sourceMap.getSourceRange(doc.ast.children[0] as parser.MarkdownTextNode, 0, 1);
+const inlineCodeRange = doc.sourceMap.getSourceRange(
+  doc.ast.children[0] as parser.MarkdownInlineCodeNode,
+  0,
+  1,
+);
 const consistency = new parser.SourceMapConsistencyError();
 const asRangeError: RangeError = new parser.SourceMapUnavailableError();
 const isSourceMapError: boolean = consistency instanceof parser.SourceMapError;
 const code: parser.SourceMapErrorCode = consistency.code;
 void raw;
+void inlineCodeRaw;
 void range;
+void inlineCodeRange;
 void consistency;
 void asRangeError;
 void isSourceMapError;

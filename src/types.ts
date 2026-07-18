@@ -105,6 +105,9 @@ export type MarkdownLinkNode = import('mdast').Link;
 /** @public */
 export type MarkdownTextNode = import('mdast').Text;
 
+/** @public */
+export type MarkdownInlineCodeNode = import('mdast').InlineCode;
+
 /**
  * The AST root returned by `parseMd`, with non-optional `position`
  * (including `start/end.offset`) on every node in the tree.
