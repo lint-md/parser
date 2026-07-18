@@ -452,13 +452,17 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
 
-  test('maps multi-line indented code after a tab list continuation prefix', () => {
-    const md = '- Foo\n\n\t  bar\n\t  baz';
-    const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
-    expect(node.value).toBe('bar\nbaz');
-    expectPerCodeUnitRanges(md, node, sourceMap);
-  });
+  test.each(['\n', '\r', '\r\n'])(
+    'maps multi-line indented code after a tab list continuation prefix with %p',
+    (lineEnding) => {
+      const md = '- Foo' + lineEnding + lineEnding
+        + '\t  bar' + lineEnding + '\t  baz';
+      const { ast, sourceMap } = parseMdWithSourceMap(md);
+      const node = codeNodes(ast)[0];
+      expect(node.value).toBe('bar' + lineEnding + 'baz');
+      expectPerCodeUnitRanges(md, node, sourceMap);
+    },
+  );
 
   test('maps multi-line indented code inside a blockquote list', () => {
     const md = '> - Foo\n>\n>       bar\n>       baz';

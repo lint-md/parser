@@ -901,13 +901,20 @@ function buildIndentedCodeSegmentsFromValueLines(
   const end = position.end.offset;
   const physicalLineStart = lineStart(md, 0, start);
   const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
-  const valueLines = node.value.split('\n');
   const spans: SourceSpan[] = [];
   let offset = physicalLineStart;
+  let valueOffset = 0;
 
-  for (const valueLine of valueLines) {
+  while (valueOffset < node.value.length) {
     if (offset >= end)
       return undefined;
+    const valueLineEnd = lineEnd(node.value, valueOffset, node.value.length);
+    const valueContentEnd = lineContentEnd(
+      node.value,
+      valueOffset,
+      valueLineEnd,
+    );
+    const valueLine = node.value.slice(valueOffset, valueContentEnd);
     const endOfLine = lineEnd(md, offset, end);
     const contentStart = quoteDepth === 0
       ? offset
@@ -929,6 +936,7 @@ function buildIndentedCodeSegmentsFromValueLines(
       return undefined;
     spans.push({ start: sourceStart, end: endOfLine });
     offset = endOfLine;
+    valueOffset = valueLineEnd;
   }
 
   trimTrailingLineEnding(md, spans);
