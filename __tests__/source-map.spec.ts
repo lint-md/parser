@@ -433,6 +433,14 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expect(md.slice(range.start.offset, range.end.offset)).toBe('value');
   });
 
+  test('maps fenced code in a list with equivalent tab and space indentation', () => {
+    const md = '- item\n\t```\n    code\n\t```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('code');
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
   test('maps multi-line indented code inside a list', () => {
     const md = '- Foo\n\n      bar\n      baz';
     const { ast, sourceMap } = parseMdWithSourceMap(md);

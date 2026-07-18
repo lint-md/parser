@@ -652,11 +652,18 @@ function fencedIndentation(
   fenceStart: number,
   quoteDepth: number,
 ): number {
-  if (quoteDepth === 0)
-    return fenceStart - lineStartOffset;
-  let offset = skipBlockQuoteMarkers(md, lineStartOffset, fenceStart, quoteDepth);
-  if (offset === undefined)
-    return -1;
+  let offset = lineStartOffset;
+  if (quoteDepth > 0) {
+    const afterMarkers = skipBlockQuoteMarkers(
+      md,
+      lineStartOffset,
+      fenceStart,
+      quoteDepth,
+    );
+    if (afterMarkers === undefined)
+      return -1;
+    offset = afterMarkers;
+  }
   let indentation = 0;
   while (offset < fenceStart) {
     const char = md.charCodeAt(offset);
