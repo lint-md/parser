@@ -100,3 +100,71 @@ describe('source-map invariants (public API)', () => {
     );
   });
 });
+
+describe('getRaw uses the parse-time offset snapshot, not live position', () => {
+  const nodeOfType = (root: any, type: string): any => {
+    let found: any;
+    (function walk(n: any) {
+      if (!found && n.type === type) found = n;
+      for (const c of n.children || []) walk(c);
+    })(root);
+    return found;
+  };
+
+  test('mutating a paragraph position does not change getRaw', () => {
+    const md = 'first paragraph\n\nsecond paragraph';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const paragraph = nodeOfType(ast, 'paragraph');
+    const before = sourceMap.getRaw(paragraph);
+    expect(before).toBe('first paragraph');
+
+    paragraph.position.start.offset = 0;
+    paragraph.position.end.offset = md.length;
+
+    expect(sourceMap.getRaw(paragraph)).toBe('first paragraph');
+  });
+
+  test('mutating a heading position does not change getRaw', () => {
+    const md = '# Title\n\nbody';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const heading = nodeOfType(ast, 'heading');
+    expect(sourceMap.getRaw(heading)).toBe('# Title');
+
+    heading.position.start.offset = 2;
+    heading.position.end.offset = md.length;
+
+    expect(sourceMap.getRaw(heading)).toBe('# Title');
+  });
+
+  test('mutating the root position does not change getRaw', () => {
+    const md = 'alpha\n\nbeta';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    expect(sourceMap.getRaw(ast)).toBe(md);
+
+    (ast as any).position.start.offset = 2;
+    (ast as any).position.end.offset = 4;
+
+    expect(sourceMap.getRaw(ast)).toBe(md);
+  });
+
+  test('mutating a text node position (but not value) keeps getRaw stable', () => {
+    const md = 'A&amp;B';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const text = nodeOfType(ast, 'text');
+    const before = sourceMap.getRaw(text);
+    expect(before).toBe(md);
+
+    text.position.start.offset = 0;
+    text.position.end.offset = 1;
+
+    expect(sourceMap.getRaw(text)).toBe(before);
+  });
+
+  test('unchanged positions behave exactly as before', () => {
+    const md = 'plain text';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const paragraph = nodeOfType(ast, 'paragraph');
+    expect(sourceMap.getRaw(paragraph)).toBe('plain text');
+    expect(sourceMap.getRaw(ast)).toBe(md);
+  });
+});
