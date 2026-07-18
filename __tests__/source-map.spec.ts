@@ -230,7 +230,7 @@ describe('parseMdWithSourceMap: contract', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&Afr;');
     const t = textNodes(ast)[0];
     // '&Afr;' decodes to a surrogate pair (2 UTF-16 units); requesting either
-    // unit must return the complete '&#x27;' source span, never a half-entity.
+    // unit must return the complete '&Afr;' source span, never a half-entity.
     expect(sourceMap.getSourceRange(t, 0, 1)).toEqual({
       start: { line: 1, column: 1, offset: 0 },
       end: { line: 1, column: 6, offset: 5 },
@@ -398,7 +398,7 @@ describe('parseMdWithSourceMap: contract', () => {
 });
 
 
-describe('parseMdWithSourceMap: plugin-generated or split text nodes', () => {
+describe('parseMdWithSourceMap: split and unmapped nodes', () => {
   test('text nodes split around a www autolink each map to their own raw span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap(
       'see www.example.com/?a&amp;b now',
@@ -450,12 +450,10 @@ describe('parseMdWithSourceMap: plugin-generated or split text nodes', () => {
     expect(sourceMap.getSourceRange(after, 0, 4).end.offset).toBe(16);
   });
 
-  test('an owned node without a text mapping throws instead of forging a position', () => {
-    // Contract: content the parser cannot attribute to the original source
-    // (synthetic / generated nodes, or non-text nodes) MUST NOT report a
-    // fabricated range; the observable behavior is a RangeError. No plugin
-    // in the current stack synthesizes text nodes, so an owned non-text
-    // node stands in for the unmapped case.
+  test('getSourceRange rejects an owned non-text node', () => {
+    // Nodes owned by this document but not supported by getSourceRange()
+    // (anything that is not a mapped text node) are rejected with a
+    // RangeError instead of a fabricated range.
     const { ast, sourceMap } = parseMdWithSourceMap('hello');
     const paragraph = ast.children[0];
     expect(() => sourceMap.getSourceRange(paragraph as any, 0, 1)).toThrow(

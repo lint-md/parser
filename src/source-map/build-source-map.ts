@@ -388,9 +388,10 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       // The start boundary is the segment containing `valueStart`; the end
       // boundary is the segment containing `valueEnd - 1` (the last value unit
       // included), so a range that stops exactly at an atomic segment's start
-      // does NOT pull that segment in. An empty range [i, i) is only valid at a
-      // literal boundary: if `i` falls inside an atomic segment there is no
-      // accurate source boundary to return, so it throws.
+      // does NOT pull that segment in. An empty range is valid at the document
+      // value boundaries, at any exact segment boundary, and inside literal
+      // segments. It throws only when it falls inside a multi-code-unit atomic
+      // segment.
       //
       // `pastUnit` distinguishes the start of a unit (false) from the offset
       // just *after* the unit (true). For a literal segment the source offset
