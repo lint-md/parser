@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- 新增确定性差分组合 fuzz 测试（`__tests__/source-map/differential.spec.ts`）：枚举原子 Markdown 片段的笛卡尔积（pair / triple / 行首前缀），对每篇文档断言 AST parity、`getSourceRange` 单调性、字面量逐 code unit 1:1 相邻、`getRaw` 落在原文内；并内置 #57 回归锚点（转义/引用后紧跟 CRLF 时 `\r` 与 `\n` 须各自映射为单个源码 code unit 且相邻），CI 新增对应 smoke 步骤（#58）
+
 - 修复转义字符后紧跟 CRLF 时，换行 source-map segment 错误继承 `escape` kind，导致 `\r` 与 `\n` 被作为同一原子段映射（两者映射到整个 `\r\n` 且重叠、CR/LF 之间的空区间误抛 `RangeError`）的问题；换行现按逐 UTF-16 code unit 正确映射（#57）
 
 ## 0.1.3
