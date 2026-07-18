@@ -16,9 +16,11 @@ export const parseMd = (md: string): PositionedMarkdownRoot => {
   // the AST returned by `remark().parse()` is fully positioned.
   //
   // The contract rests on three guarantees:
-  // 1. `gfmAutolinkLiteralFromMarkdown.transforms = []` (set in
-  //    `./remark-config`) disables the GFM autolink post-process, which is the
-  //    only known path that can synthesize children without a `position` (see
+  // 1. The `positionSafeGfm` plugin (in `./remark-config`) disables the GFM
+  //    autolink post-process transform — the only known path that can
+  //    synthesize children without a `position` — by replacing the autolink
+  //    extension in this processor's own data with a clone whose `transforms`
+  //    is empty, without mutating the shared import (see
   //    https://github.com/remarkjs/remark-gfm/issues/16).
   // 2. The unified processor is module-level and reused across calls,
   //    so behavior does not drift between invocations.
