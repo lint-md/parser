@@ -378,6 +378,32 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     });
   });
 
+  test('maps fenced code inside a blockquote', () => {
+    const md = '> ```js\n> const x = 1\n> ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('const x = 1');
+    const range = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toContain('const x = 1');
+  });
+
+  test('maps indented code inside a blockquote', () => {
+    const md = '>     indented\n>     code';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('indented\ncode');
+    expectPerCodeUnitRanges(md, node, sourceMap);
+  });
+
+  test('maps fenced code nested in a list', () => {
+    const md = '- item\n    ```\n    value\n    ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = codeNodes(ast)[0];
+    expect(node.value).toBe('value');
+    const range = sourceMap.getSourceRange(node, 0, node.value.length);
+    expect(md.slice(range.start.offset, range.end.offset)).toBe('value');
+  });
+
   test('excludes fenced delimiters and their indentation from code ranges', () => {
     const md = '  ```\n  a\n  b\n  ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);

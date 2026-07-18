@@ -424,6 +424,58 @@ function lineContentEnd(md: string, start: number, end: number): number {
   return md.charCodeAt(end - 1) === 13 ? end - 1 : end;
 }
 
+function blockQuoteDepth(md: string, start: number, end: number): number {
+  let depth = 0;
+  for (let offset = start; offset < end; offset++) {
+    if (md.charCodeAt(offset) === 62 /* > */)
+      depth++;
+  }
+  return depth;
+}
+
+function skipBlockQuoteMarkers(
+  md: string,
+  start: number,
+  end: number,
+  depth: number,
+): number | undefined {
+  let offset = start;
+  for (let index = 0; index < depth; index++) {
+    while (offset < end && (md.charCodeAt(offset) === 32 || md.charCodeAt(offset) === 9)) {
+      offset++;
+    }
+    if (md.charCodeAt(offset) !== 62)
+      return undefined;
+    offset++;
+    if (md.charCodeAt(offset) === 32)
+      offset++;
+  }
+  return offset;
+}
+
+function fencedIndentation(
+  md: string,
+  lineStartOffset: number,
+  fenceStart: number,
+  quoteDepth: number,
+): number {
+  if (quoteDepth === 0)
+    return fenceStart - lineStartOffset;
+  let offset = fenceStart - 1;
+  while (offset >= lineStartOffset && md.charCodeAt(offset) !== 62) offset--;
+  if (offset < lineStartOffset)
+    return -1;
+  offset++;
+  if (md.charCodeAt(offset) === 32)
+    offset++;
+  let indentation = 0;
+  while (offset < fenceStart && md.charCodeAt(offset) === 32) {
+    offset++;
+    indentation++;
+  }
+  return offset === fenceStart ? indentation : -1;
+}
+
 function trimTrailingLineEnding(md: string, spans: SourceSpan[]): void {
   const last = spans[spans.length - 1];
   if (!last)
@@ -445,10 +497,12 @@ function segmentsFromSpans(
 ): MarkdownSourceMapSegment[] | undefined {
   const segments: MarkdownSourceMapSegment[] = [];
   let valueOffset = 0;
+  let sourceValue = '';
   for (const span of spans) {
     if (span.start >= span.end)
       continue;
     const length = span.end - span.start;
+    sourceValue += md.slice(span.start, span.end);
     const previous = segments[segments.length - 1];
     if (previous && previous.sourceEnd === span.start && previous.valueEnd === valueOffset) {
       previous.sourceEnd = span.end;
@@ -465,7 +519,9 @@ function segmentsFromSpans(
     }
     valueOffset += length;
   }
-  return valueOffset === value.length ? segments : undefined;
+  return valueOffset === value.length && sourceValue === value
+    ? segments
+    : undefined;
 }
 
 function buildFencedCodeSegments(
@@ -486,10 +542,29 @@ function buildFencedCodeSegments(
   if (fenceLength < 3)
     return undefined;
 
+  const physicalLineStart = lineStart(md, 0, start);
+  const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
+  const openingIndent = fencedIndentation(md, physicalLineStart, start, quoteDepth);
+  if (openingIndent < 0)
+    return undefined;
   const openingLineEnd = lineEnd(md, start, end);
   let contentEnd = end;
   const closingLineStart = lineStart(md, start, end);
-  const closing = md.slice(closingLineStart, end);
+  const closingStart = quoteDepth === 0
+    ? closingLineStart
+    : skipBlockQuoteMarkers(md, closingLineStart, end, quoteDepth);
+  if (closingStart === undefined)
+    return undefined;
+  let closingFenceStart = closingStart;
+  let removedIndentation = 0;
+  while (
+    removedIndentation < openingIndent
+    && md.charCodeAt(closingFenceStart) === 32
+  ) {
+    closingFenceStart++;
+    removedIndentation++;
+  }
+  const closing = md.slice(closingFenceStart, end);
   const closingMatch = /^( {0,3})(`+|~+)[ \t]*$/.exec(closing);
   if (
     closingMatch
@@ -499,13 +574,15 @@ function buildFencedCodeSegments(
     contentEnd = closingLineStart;
   }
 
-  const physicalLineStart = lineStart(md, 0, start);
-  const openingIndent = start - physicalLineStart;
   const spans: SourceSpan[] = [];
   let offset = openingLineEnd;
   while (offset < contentEnd) {
     const endOfLine = lineEnd(md, offset, contentEnd);
-    let contentStart = offset;
+    let contentStart = quoteDepth === 0
+      ? offset
+      : skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth);
+    if (contentStart === undefined)
+      return undefined;
     let removed = 0;
     while (removed < openingIndent && md.charCodeAt(contentStart) === 32) {
       contentStart++;
@@ -533,11 +610,18 @@ function buildIndentedCodeSegments(
     return undefined;
   const start = position.start.offset;
   const end = position.end.offset;
+  const physicalLineStart = lineStart(md, 0, start);
+  const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
   const spans: SourceSpan[] = [];
   let offset = start;
+  let firstLine = true;
   while (offset < end) {
     const endOfLine = lineEnd(md, offset, end);
-    let contentStart = offset;
+    let contentStart = !firstLine && quoteDepth > 0
+      ? skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth)
+      : offset;
+    if (contentStart === undefined)
+      return undefined;
     let indentation = 0;
     while (indentation < 4) {
       const char = md.charCodeAt(contentStart);
@@ -559,6 +643,7 @@ function buildIndentedCodeSegments(
       return undefined;
     spans.push({ start: contentStart, end: endOfLine });
     offset = endOfLine;
+    firstLine = false;
   }
   trimTrailingLineEnding(md, spans);
   const segments = segmentsFromSpans(md, spans, node.value);
@@ -615,10 +700,10 @@ function findSegmentAt(
 
 /**
  * Parse Markdown and additionally produce a sidecar source map that resolves
- * each `text` node's normalized `value` back to the raw Markdown source.
+ * supported normalized-value fields back to the raw Markdown source.
  *
- * The AST is identical to {@link parseMd}; only `text` nodes carry a mapping
- * in the first version.
+ * The AST is identical to {@link parseMd}. The current version maps
+ * `text.value`, `inlineCode.value`, and block `code.value`.
  *
  * @param md - Markdown text.
  * @returns The positioned AST plus a source map.
