@@ -90,6 +90,15 @@ describe('parseMdWithSourceMap: non-contiguous source ranges', () => {
       'hello',
     );
   });
+
+  test('a partial range crossing a source gap is rejected', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('> hello\n>  world');
+    const node = textNodes(ast)[0];
+
+    expect(() => sourceMap.getSourceRange(node, 3, 8)).toThrow(
+      'getSourceRange: value range crosses non-contiguous source segments',
+    );
+  });
 });
 
 describe('parseMdWithSourceMap: text.value → raw source', () => {
