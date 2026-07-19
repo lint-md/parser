@@ -1281,6 +1281,28 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         return seg.sourceStart + units;
       };
 
+      const assertContiguousSourceRange = (
+        startIndex: number,
+        endIndex: number,
+      ): void => {
+        const startSegment = findSegmentAt(segs, startIndex);
+        const endSegment = findSegmentAt(segs, endIndex);
+        if (!startSegment || !endSegment) {
+          throw new RangeError(
+            'getSourceRange: value range is not fully covered by the source map',
+          );
+        }
+        const startSegmentIndex = segs.indexOf(startSegment);
+        const endSegmentIndex = segs.indexOf(endSegment);
+        for (let index = startSegmentIndex; index < endSegmentIndex; index++) {
+          if (segs[index].sourceEnd !== segs[index + 1].sourceStart) {
+            throw new RangeError(
+              'getSourceRange: value range crosses non-contiguous source segments',
+            );
+          }
+        }
+      };
+
       // An empty range [i, i) denotes a single source point. Resolve it
       // directly: only a multi-code-unit atomic construct (escape / character
       // reference / normalization) has no accurate boundary inside it.
@@ -1315,6 +1337,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
 
       const startOffset = sourceOffsetAt(valueStart, false);
       const endOffset = sourceOffsetAt(valueEnd === 0 ? 0 : valueEnd - 1, true);
+      assertContiguousSourceRange(valueStart, valueEnd - 1);
       return {
         start: pointAtOffset(lineStarts, md, startOffset),
         end: pointAtOffset(lineStarts, md, endOffset),
