@@ -1010,6 +1010,18 @@ function findSegmentAt(
   return index === undefined ? undefined : segs[index];
 }
 
+/** Prefix count of source gaps before each segment. */
+function buildSourceGapPrefix(segs: MarkdownSourceMapSegment[]): number[] {
+  const prefix = [0];
+  for (let index = 0; index + 1 < segs.length; index++) {
+    prefix.push(
+      prefix[index]
+      + Number(segs[index].sourceEnd !== segs[index + 1].sourceStart),
+    );
+  }
+  return prefix;
+}
+
 /**
  * Parse Markdown and additionally produce a sidecar source map that resolves
  * supported normalized-value fields back to the raw Markdown source.
@@ -1108,14 +1120,15 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const originalValues = new WeakMap<object, string>();
   const originalUrls = new WeakMap<object, string>();
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
+  const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
   (function register(node: any) {
     owned.add(node);
-    if (
-      state.segments.has(node)
-      || state.inlineCodeSegments.has(node)
-      || state.codeSegments.has(node)
-    ) {
+    const mappedSegments = state.segments.get(node)
+      || state.inlineCodeSegments.get(node)
+      || state.codeSegments.get(node);
+    if (mappedSegments) {
       originalValues.set(node, node.value);
+      sourceGapPrefixes.set(mappedSegments, buildSourceGapPrefix(mappedSegments));
     }
     if (state.urlSegments.has(node))
       originalUrls.set(node, node.url);
@@ -1299,12 +1312,14 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
             'getSourceRange: value range is not fully covered by the source map',
           );
         }
-        for (let index = startSegmentIndex; index < endSegmentIndex; index++) {
-          if (segs[index].sourceEnd !== segs[index + 1].sourceStart) {
-            throw new RangeError(
-              'getSourceRange: value range crosses non-contiguous source segments',
-            );
-          }
+        const gapPrefix = sourceGapPrefixes.get(segs);
+        if (
+          !gapPrefix
+          || gapPrefix[endSegmentIndex] !== gapPrefix[startSegmentIndex]
+        ) {
+          throw new RangeError(
+            'getSourceRange: value range crosses non-contiguous source segments',
+          );
         }
       };
 
