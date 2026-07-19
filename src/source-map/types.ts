@@ -96,8 +96,11 @@ export interface MarkdownSourceMap {
    * the corresponding range in the raw Markdown source. Supported nodes are
    * `text`, `inlineCode`, and block `code`.
    *
-   * The returned range is monotonically increasing and covers the union of
-   * every source segment spanned by `[valueStart, valueEnd)`.
+   * The returned range is monotonically increasing and covers every source
+   * segment spanned by `[valueStart, valueEnd)`. If those segments are
+   * separated in the raw Markdown by container syntax (such as blockquote
+   * markers or list indentation), no single accurate range exists and this
+   * method throws instead.
    *
    * Failure modes:
    *
@@ -107,8 +110,9 @@ export interface MarkdownSourceMap {
    * - {@link SourceMapConsistencyError} — the mapped node has been modified since
    *   parsing; the map only covers the original parsed value.
    * - `RangeError` — `valueStart` / `valueEnd` are not finite integers, are
-   *   out of bounds, are reversed, or (for an empty range) fall inside an
-   *   atomic construct where no accurate source boundary exists.
+   *   out of bounds, are reversed, span non-contiguous source segments, or
+   *   (for an empty range) fall inside an atomic construct where no accurate
+   *   source boundary exists.
    *
    * @param node - A supported value node from the document this map was built for.
    * @param valueStart - Start index into `node.value` (inclusive).

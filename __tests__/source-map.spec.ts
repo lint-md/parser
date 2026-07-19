@@ -45,6 +45,62 @@ function nodesOfType(root: any, type: string): any[] {
   return out;
 }
 
+describe('parseMdWithSourceMap: documented supported fields are available', () => {
+  test.each([
+    ['inlineCode.value', '`npm install`', 'inlineCode', 'value', 'npm install'],
+    ['code.value', '```sh\necho ready\n```', 'code', 'value', 'echo ready'],
+    ['inline link url', '[docs](https://example.com/guide)', 'link', 'url', 'https://example.com/guide'],
+    ['definition url', '[docs]: https://example.com/guide', 'definition', 'url', 'https://example.com/guide'],
+  ])(
+    '%s maps common valid Markdown without becoming unavailable',
+    (_label, markdown, nodeType, field, expectedRaw) => {
+      const { ast, sourceMap } = parseMdWithSourceMap(markdown);
+      const node = nodesOfType(ast, nodeType)[0];
+      const value = node[field];
+
+      const range = field === 'url'
+        ? sourceMap.getFieldSourceRange(node, 'url', 0, value.length)
+        : sourceMap.getSourceRange(node, 0, value.length);
+
+      expect(markdown.slice(range.start.offset, range.end.offset)).toBe(expectedRaw);
+    },
+  );
+});
+
+describe('parseMdWithSourceMap: non-contiguous source ranges', () => {
+  test.each([
+    ['blockquote continuation', '> hello\n>  world'],
+    ['list continuation', '- hello\n  world'],
+  ])('%s rejects a range that would include container syntax', (_label, md) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = textNodes(ast)[0];
+
+    expect(node.value).toBe('hello\nworld');
+    expect(() => sourceMap.getSourceRange(node, 0, node.value.length)).toThrow(
+      'getSourceRange: value range crosses non-contiguous source segments',
+    );
+  });
+
+  test('a blockquote range contained in one source segment remains available', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('> hello\n>  world');
+    const node = textNodes(ast)[0];
+    const range = sourceMap.getSourceRange(node, 0, 5);
+
+    expect('> hello\n>  world'.slice(range.start.offset, range.end.offset)).toBe(
+      'hello',
+    );
+  });
+
+  test('a partial range crossing a source gap is rejected', () => {
+    const { ast, sourceMap } = parseMdWithSourceMap('> hello\n>  world');
+    const node = textNodes(ast)[0];
+
+    expect(() => sourceMap.getSourceRange(node, 3, 8)).toThrow(
+      'getSourceRange: value range crosses non-contiguous source segments',
+    );
+  });
+});
+
 describe('parseMdWithSourceMap: text.value → raw source', () => {
   test('backslash escape \\( maps to a 2-char source span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('\\(');
@@ -316,16 +372,15 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     node: any,
     sourceMap: any,
   ): void {
-    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
-    let previousStart = whole.start.offset;
-    let previousEnd = whole.start.offset;
+    let previousStart = node.position.start.offset;
+    let previousEnd = node.position.start.offset;
     for (let i = 0; i < node.value.length; i++) {
       const range = sourceMap.getSourceRange(node, i, i + 1);
       expect(range.start.offset).toBeGreaterThanOrEqual(0);
       expect(range.end.offset).toBeGreaterThanOrEqual(range.start.offset);
       expect(range.end.offset).toBeLessThanOrEqual(md.length);
-      expect(range.start.offset).toBeGreaterThanOrEqual(whole.start.offset);
-      expect(range.end.offset).toBeLessThanOrEqual(whole.end.offset);
+      expect(range.start.offset).toBeGreaterThanOrEqual(node.position.start.offset);
+      expect(range.end.offset).toBeLessThanOrEqual(node.position.end.offset);
       expect(range.start.offset).toBeGreaterThanOrEqual(previousStart);
       expect(range.end.offset).toBeGreaterThanOrEqual(previousEnd);
       previousStart = range.start.offset;
@@ -356,9 +411,9 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     const node = codeNodes(ast)[0];
     expect(node.value).toBe('a\r\n\r\nb');
     expect(sourceMap.getRaw(node)).toBe('    a\r\n\r\n    b');
-    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
-    expect(whole.start.offset).toBe(md.indexOf('a'));
-    expect(whole.end.offset).toBe(md.indexOf('b') + 1);
+    expect(() => sourceMap.getSourceRange(node, 0, node.value.length)).toThrow(
+      'getSourceRange: value range crosses non-contiguous source segments',
+    );
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
 
@@ -446,9 +501,9 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     const { ast, sourceMap } = parseMdWithSourceMap(md);
     const node = codeNodes(ast)[0];
     expect(node.value).toBe('bar\nbaz');
-    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
-    expect(whole.start.offset).toBe(md.indexOf('bar'));
-    expect(whole.end.offset).toBe(md.indexOf('baz') + 3);
+    expect(() => sourceMap.getSourceRange(node, 0, node.value.length)).toThrow(
+      'getSourceRange: value range crosses non-contiguous source segments',
+    );
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
 
@@ -469,9 +524,9 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     const { ast, sourceMap } = parseMdWithSourceMap(md);
     const node = codeNodes(ast)[0];
     expect(node.value).toBe('bar\nbaz');
-    const whole = sourceMap.getSourceRange(node, 0, node.value.length);
-    expect(whole.start.offset).toBe(md.indexOf('bar'));
-    expect(whole.end.offset).toBe(md.indexOf('baz') + 3);
+    expect(() => sourceMap.getSourceRange(node, 0, node.value.length)).toThrow(
+      'getSourceRange: value range crosses non-contiguous source segments',
+    );
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
 

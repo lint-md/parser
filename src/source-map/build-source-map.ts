@@ -984,10 +984,10 @@ function buildCodeSegments(
  * pathological text nodes with many alternating entity/escape segments queried
  * repeatedly.
  */
-function findSegmentAt(
+function findSegmentIndexAt(
   segs: MarkdownSourceMapSegment[],
   valueIndex: number,
-): MarkdownSourceMapSegment | undefined {
+): number | undefined {
   let lo = 0;
   let hi = segs.length - 1;
   while (lo < hi) {
@@ -997,10 +997,29 @@ function findSegmentAt(
     else hi = mid - 1;
   }
   const seg = segs[lo];
-  if (seg && valueIndex >= seg.valueStart && valueIndex < seg.valueEnd) {
-    return seg;
+  return seg && valueIndex >= seg.valueStart && valueIndex < seg.valueEnd
+    ? lo
+    : undefined;
+}
+
+function findSegmentAt(
+  segs: MarkdownSourceMapSegment[],
+  valueIndex: number,
+): MarkdownSourceMapSegment | undefined {
+  const index = findSegmentIndexAt(segs, valueIndex);
+  return index === undefined ? undefined : segs[index];
+}
+
+/** Prefix count of source gaps before each segment. */
+function buildSourceGapPrefix(segs: MarkdownSourceMapSegment[]): number[] {
+  const prefix = [0];
+  for (let index = 0; index + 1 < segs.length; index++) {
+    prefix.push(
+      prefix[index]
+      + Number(segs[index].sourceEnd !== segs[index + 1].sourceStart),
+    );
   }
-  return undefined;
+  return prefix;
 }
 
 /**
@@ -1101,14 +1120,15 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const originalValues = new WeakMap<object, string>();
   const originalUrls = new WeakMap<object, string>();
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
+  const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
   (function register(node: any) {
     owned.add(node);
-    if (
-      state.segments.has(node)
-      || state.inlineCodeSegments.has(node)
-      || state.codeSegments.has(node)
-    ) {
+    const mappedSegments = state.segments.get(node)
+      || state.inlineCodeSegments.get(node)
+      || state.codeSegments.get(node);
+    if (mappedSegments) {
       originalValues.set(node, node.value);
+      sourceGapPrefixes.set(mappedSegments, buildSourceGapPrefix(mappedSegments));
     }
     if (state.urlSegments.has(node))
       originalUrls.set(node, node.url);
@@ -1281,6 +1301,28 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         return seg.sourceStart + units;
       };
 
+      const assertContiguousSourceRange = (
+        startIndex: number,
+        endIndex: number,
+      ): void => {
+        const startSegmentIndex = findSegmentIndexAt(segs, startIndex);
+        const endSegmentIndex = findSegmentIndexAt(segs, endIndex);
+        if (startSegmentIndex === undefined || endSegmentIndex === undefined) {
+          throw new RangeError(
+            'getSourceRange: value range is not fully covered by the source map',
+          );
+        }
+        const gapPrefix = sourceGapPrefixes.get(segs);
+        if (
+          !gapPrefix
+          || gapPrefix[endSegmentIndex] !== gapPrefix[startSegmentIndex]
+        ) {
+          throw new RangeError(
+            'getSourceRange: value range crosses non-contiguous source segments',
+          );
+        }
+      };
+
       // An empty range [i, i) denotes a single source point. Resolve it
       // directly: only a multi-code-unit atomic construct (escape / character
       // reference / normalization) has no accurate boundary inside it.
@@ -1315,6 +1357,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
 
       const startOffset = sourceOffsetAt(valueStart, false);
       const endOffset = sourceOffsetAt(valueEnd === 0 ? 0 : valueEnd - 1, true);
+      assertContiguousSourceRange(valueStart, valueEnd - 1);
       return {
         start: pointAtOffset(lineStarts, md, startOffset),
         end: pointAtOffset(lineStarts, md, endOffset),

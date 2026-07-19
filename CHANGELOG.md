@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- 修复 `getSourceRange()` 在 blockquote marker、list indentation 等容器语法分隔同一 value 的源码片段时，错误返回包含容器语法的连续范围；现在此类无法由单个 `ParsedPosition` 准确表示的范围会抛出 `RangeError`（#80）。
 - 修复 fenced 与 indented `code.value` 在 blockquote/list 容器前缀中包含 Tab 时无法建立源码映射的问题；无法逐字面还原 Tab 展开的虚拟空格时仍安全地拒绝映射（#76）。
 - 修复没有 closing fence 的空 fenced code block 将 opening fence 误判为 closing fence，导致 `getSourceRange(code, 0, 0)` 返回 opening 位置而非 EOF 的问题（#75）。
 - 修复转义字符后紧跟 CRLF 时，换行 source-map segment 错误继承 `escape` kind，导致 `\r` 与 `\n` 被作为同一原子段映射（两者映射到整个 `\r\n` 且重叠、CR/LF 之间的空区间误抛 `RangeError`）的问题；换行现按逐 UTF-16 code unit 正确映射（#57）
