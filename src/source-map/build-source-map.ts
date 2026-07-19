@@ -984,10 +984,10 @@ function buildCodeSegments(
  * pathological text nodes with many alternating entity/escape segments queried
  * repeatedly.
  */
-function findSegmentAt(
+function findSegmentIndexAt(
   segs: MarkdownSourceMapSegment[],
   valueIndex: number,
-): MarkdownSourceMapSegment | undefined {
+): number | undefined {
   let lo = 0;
   let hi = segs.length - 1;
   while (lo < hi) {
@@ -997,10 +997,17 @@ function findSegmentAt(
     else hi = mid - 1;
   }
   const seg = segs[lo];
-  if (seg && valueIndex >= seg.valueStart && valueIndex < seg.valueEnd) {
-    return seg;
-  }
-  return undefined;
+  return seg && valueIndex >= seg.valueStart && valueIndex < seg.valueEnd
+    ? lo
+    : undefined;
+}
+
+function findSegmentAt(
+  segs: MarkdownSourceMapSegment[],
+  valueIndex: number,
+): MarkdownSourceMapSegment | undefined {
+  const index = findSegmentIndexAt(segs, valueIndex);
+  return index === undefined ? undefined : segs[index];
 }
 
 /**
@@ -1285,15 +1292,13 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         startIndex: number,
         endIndex: number,
       ): void => {
-        const startSegment = findSegmentAt(segs, startIndex);
-        const endSegment = findSegmentAt(segs, endIndex);
-        if (!startSegment || !endSegment) {
+        const startSegmentIndex = findSegmentIndexAt(segs, startIndex);
+        const endSegmentIndex = findSegmentIndexAt(segs, endIndex);
+        if (startSegmentIndex === undefined || endSegmentIndex === undefined) {
           throw new RangeError(
             'getSourceRange: value range is not fully covered by the source map',
           );
         }
-        const startSegmentIndex = segs.indexOf(startSegment);
-        const endSegmentIndex = segs.indexOf(endSegment);
         for (let index = startSegmentIndex; index < endSegmentIndex; index++) {
           if (segs[index].sourceEnd !== segs[index + 1].sourceStart) {
             throw new RangeError(
