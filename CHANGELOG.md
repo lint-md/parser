@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1
+
+### Refactored
+
+- 拆分 source-map 的 recording extension 与 code segment reconstruction，缩小 `build-source-map.ts` 的职责范围。
+- 保持公开 API、解析行为、source-map 契约和 CJS / ESM 产物不变。
+
+### Tests
+
+- 保留 source-map、AST parity、CJS / ESM 和打包安装验证。
+
 ## 0.2.0
 
 ### Added
