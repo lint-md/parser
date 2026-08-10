@@ -127,4 +127,17 @@ describe('CRLF after an escape / reference maps per code unit (#57)', () => {
       expect(md.slice(range.start.offset, range.end.offset)).toBe(raw);
     }
   });
+
+  test.each<[string, string, string[]]>([
+    ['consecutive escapes', '\\(\\)', ['\\(', '\\)']],
+    ['consecutive references', '&amp;&#40;', ['&amp;', '&#40;']],
+    ['alternating constructs', '\\(&amp;\\)', ['\\(', '&amp;', '\\)']],
+  ])('%s consume one span each', (_label, md, expected) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = textNode(ast);
+    for (const [index, raw] of expected.entries()) {
+      const range = sourceMap.getSourceRange(node, index, index + 1);
+      expect(md.slice(range.start.offset, range.end.offset)).toBe(raw);
+    }
+  });
 });

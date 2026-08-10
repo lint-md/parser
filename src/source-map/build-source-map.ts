@@ -31,10 +31,6 @@ import type {
 const { micromarkExtensions, fromMarkdownExtensions } = getParserExtensions();
 
 interface RecordingState {
-  /** Source start of the active escape/character-reference construct. */
-  activeStart: number
-  /** Source end of the active escape/character-reference construct. */
-  activeEnd: number
   /** node -> ordered, gap-free, non-overlapping segments. */
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** inlineCode node -> value segments (see buildInlineCodeSegments). */
@@ -55,6 +51,11 @@ interface SegmentMetadata {
   sourceStart: number
   sourceEnd: number
   kind: MarkdownSourceMapSegment['kind']
+}
+
+interface PendingConstruct {
+  sourceStart: number
+  sourceEnd: number
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -109,6 +110,17 @@ interface CompileContext {
  * wrong mapping; the parity + source-map test suites are the guardrail.
  */
 function recordingExtension(state: RecordingState) {
+  let pendingConstruct: PendingConstruct | undefined;
+
+  const takePendingConstruct = (): PendingConstruct => {
+    if (!pendingConstruct) {
+      throw new Error('Missing pending source-map construct');
+    }
+    const construct = pendingConstruct;
+    pendingConstruct = undefined;
+    return construct;
+  };
+
   const onenterdata = function (this: CompileContext, token: any) {
     const node = this.stack[this.stack.length - 1];
     let tail = node.children[node.children.length - 1];
@@ -128,8 +140,13 @@ function recordingExtension(state: RecordingState) {
   // construct (backslash + escaped char, or `&`...`;`). Capture the outer
   // token's boundaries on enter so the value-exit can record the full range.
   const onenterConstruct = function (this: CompileContext, token: any) {
-    state.activeStart = token.start.offset;
-    state.activeEnd = token.end.offset;
+    if (pendingConstruct) {
+      throw new Error('A source-map construct is already pending');
+    }
+    pendingConstruct = {
+      sourceStart: token.start.offset,
+      sourceEnd: token.end.offset,
+    };
     onenterdata.call(this, token);
   };
 
@@ -154,6 +171,7 @@ function recordingExtension(state: RecordingState) {
   };
 
   const onexitcharacterreferencevalue = function (this: CompileContext, token: any) {
+    const construct = takePendingConstruct();
     const data = this.sliceSerialize(token);
     const type = this.getData('characterReferenceType') as string | undefined;
     let value: string;
@@ -182,8 +200,7 @@ function recordingExtension(state: RecordingState) {
       segs.push({
         valueStart,
         valueEnd: valueStart + value.length,
-        sourceStart: state.activeStart,
-        sourceEnd: state.activeEnd,
+        ...construct,
         kind,
       });
     }
@@ -298,9 +315,9 @@ function recordingExtension(state: RecordingState) {
         });
       },
       characterEscapeValue(this: CompileContext, token: any) {
+        const construct = takePendingConstruct();
         onexitdata.call(this, token, {
-          sourceStart: state.activeStart,
-          sourceEnd: state.activeEnd,
+          ...construct,
           kind: 'escape',
         });
       },
@@ -1042,8 +1059,6 @@ function buildSourceGapPrefix(segs: MarkdownSourceMapSegment[]): number[] {
  */
 export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const state: RecordingState = {
-    activeStart: 0,
-    activeEnd: 0,
     segments: new WeakMap(),
     inlineCodeSegments: new WeakMap(),
     codeSegments: new WeakMap(),
