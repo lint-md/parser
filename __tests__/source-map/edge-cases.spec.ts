@@ -114,4 +114,17 @@ describe('CRLF after an escape / reference maps per code unit (#57)', () => {
     expect(between.start.offset).toBe(crRange.end.offset);
     expect(between.end.offset).toBe(crRange.end.offset);
   });
+
+  test('keeps segment metadata local across mixed events', () => {
+    const md = '\\(\r\nA&amp;B\\)C';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = textNode(ast);
+    expect(node.value).toBe('(\r\nA&B)C');
+
+    const expected = ['\\(', '\r', '\n', 'A', '&amp;', 'B', '\\)', 'C'];
+    for (const [index, raw] of expected.entries()) {
+      const range = sourceMap.getSourceRange(node, index, index + 1);
+      expect(md.slice(range.start.offset, range.end.offset)).toBe(raw);
+    }
+  });
 });

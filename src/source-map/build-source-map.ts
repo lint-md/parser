@@ -35,14 +35,10 @@ interface RecordingState {
   current: object | null
   /** Length of `current.value` at the start of the active segment. */
   len: number
-  /** Kind to assign to the next `data`/`characterEscapeValue` segment. */
-  kind: MarkdownSourceMapSegment['kind']
   /** Source start of the active escape/character-reference construct. */
   activeStart: number
   /** Source end of the active escape/character-reference construct. */
   activeEnd: number
-  /** When true, the next `onexitdata` records the full construct span. */
-  fullSpan: boolean
   /** node -> ordered, gap-free, non-overlapping segments. */
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** inlineCode node -> value segments (see buildInlineCodeSegments). */
@@ -57,6 +53,12 @@ interface RecordingState {
   emptyUrlOffsets: WeakMap<object, number>
   /** link / definition node -> parser-confirmed destination content span. */
   urlSourceSpans: WeakMap<object, SourceSpan>
+}
+
+interface SegmentMetadata {
+  sourceStart: number
+  sourceEnd: number
+  kind: MarkdownSourceMapSegment['kind']
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -137,24 +139,23 @@ function recordingExtension(state: RecordingState) {
     onenterdata.call(this, token);
   };
 
-  const onexitdata = function (this: CompileContext, token: any) {
+  const onexitdata = function (
+    this: CompileContext,
+    token: any,
+    metadata: SegmentMetadata,
+  ) {
     const tail = this.stack.pop();
     const slice = this.sliceSerialize(token);
     tail.value += slice;
     tail.position.end = point(token.end);
     const segs = state.segments.get(tail);
     if (segs) {
-      const sourceStart = state.fullSpan ? state.activeStart : token.start.offset;
-      const sourceEnd = state.fullSpan ? state.activeEnd : token.end.offset;
       segs.push({
         valueStart: state.len,
         valueEnd: state.len + slice.length,
-        sourceStart,
-        sourceEnd,
-        kind: state.kind,
+        ...metadata,
       });
       state.len += slice.length;
-      state.fullSpan = false;
     }
   };
 
@@ -207,25 +208,30 @@ function recordingExtension(state: RecordingState) {
       && this.config.canContainEols.includes(context.type)
     ) {
       onenterdata.call(this, token);
-      // A line ending is verbatim source (1:1). Reset `kind` to 'literal' so it
-      // does not inherit the previous construct's kind (e.g. 'escape' left by a
-      // preceding `\(`), which would wrongly mark the CRLF as an atomic segment
-      // and break per-code-unit mapping of `\r` / `\n`.
-      state.kind = 'literal';
-      onexitdata.call(this, token);
+      onexitdata.call(this, token, {
+        sourceStart: token.start.offset,
+        sourceEnd: token.end.offset,
+        kind: 'literal',
+      });
     }
   };
 
   const onexitautolinkprotocol = function (this: CompileContext, token: any) {
-    state.kind = 'literal';
-    onexitdata.call(this, token);
+    onexitdata.call(this, token, {
+      sourceStart: token.start.offset,
+      sourceEnd: token.end.offset,
+      kind: 'literal',
+    });
     const node = this.stack[this.stack.length - 1];
     node.url = this.sliceSerialize(token);
   };
 
   const onexitautolinkemail = function (this: CompileContext, token: any) {
-    state.kind = 'literal';
-    onexitdata.call(this, token);
+    onexitdata.call(this, token, {
+      sourceStart: token.start.offset,
+      sourceEnd: token.end.offset,
+      kind: 'literal',
+    });
     const node = this.stack[this.stack.length - 1];
     node.url = `mailto:${this.sliceSerialize(token)}`;
   };
@@ -291,13 +297,18 @@ function recordingExtension(state: RecordingState) {
     },
     exit: {
       data(this: CompileContext, token: any) {
-        state.kind = 'literal';
-        onexitdata.call(this, token);
+        onexitdata.call(this, token, {
+          sourceStart: token.start.offset,
+          sourceEnd: token.end.offset,
+          kind: 'literal',
+        });
       },
       characterEscapeValue(this: CompileContext, token: any) {
-        state.kind = 'escape';
-        state.fullSpan = true;
-        onexitdata.call(this, token);
+        onexitdata.call(this, token, {
+          sourceStart: state.activeStart,
+          sourceEnd: state.activeEnd,
+          kind: 'escape',
+        });
       },
       characterReferenceValue: onexitcharacterreferencevalue,
       lineEnding: onexitlineending,
@@ -1039,10 +1050,8 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const state: RecordingState = {
     current: null,
     len: 0,
-    kind: 'literal',
     activeStart: 0,
     activeEnd: 0,
-    fullSpan: false,
     segments: new WeakMap(),
     inlineCodeSegments: new WeakMap(),
     codeSegments: new WeakMap(),
