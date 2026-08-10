@@ -31,10 +31,6 @@ import type {
 const { micromarkExtensions, fromMarkdownExtensions } = getParserExtensions();
 
 interface RecordingState {
-  /** Text node currently being appended to. */
-  current: object | null
-  /** Length of `current.value` at the start of the active segment. */
-  len: number
   /** Source start of the active escape/character-reference construct. */
   activeStart: number
   /** Source end of the active escape/character-reference construct. */
@@ -122,10 +118,8 @@ function recordingExtension(state: RecordingState) {
       node.children.push(tail);
     }
     this.stack.push(tail);
-    if (state.current !== tail) {
-      state.current = tail;
+    if (!state.segments.has(tail)) {
       state.segments.set(tail, []);
-      state.len = 0;
     }
   };
 
@@ -146,16 +140,16 @@ function recordingExtension(state: RecordingState) {
   ) {
     const tail = this.stack.pop();
     const slice = this.sliceSerialize(token);
+    const valueStart = tail.value.length;
     tail.value += slice;
     tail.position.end = point(token.end);
     const segs = state.segments.get(tail);
     if (segs) {
       segs.push({
-        valueStart: state.len,
-        valueEnd: state.len + slice.length,
+        valueStart,
+        valueEnd: valueStart + slice.length,
         ...metadata,
       });
-      state.len += slice.length;
     }
   };
 
@@ -180,18 +174,18 @@ function recordingExtension(state: RecordingState) {
       kind = 'character-reference';
     }
     const tail = this.stack.pop();
+    const valueStart = tail.value.length;
     tail.value += value;
     tail.position.end = point(token.end);
     const segs = state.segments.get(tail);
     if (segs) {
       segs.push({
-        valueStart: state.len,
-        valueEnd: state.len + value.length,
+        valueStart,
+        valueEnd: valueStart + value.length,
         sourceStart: state.activeStart,
         sourceEnd: state.activeEnd,
         kind,
       });
-      state.len += value.length;
     }
   };
 
@@ -1048,8 +1042,6 @@ function buildSourceGapPrefix(segs: MarkdownSourceMapSegment[]): number[] {
  */
 export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const state: RecordingState = {
-    current: null,
-    len: 0,
     activeStart: 0,
     activeEnd: 0,
     segments: new WeakMap(),
