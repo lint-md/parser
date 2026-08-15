@@ -5,37 +5,7 @@ import {
   SourceMapUnavailableError,
 } from './helpers';
 
-/** Collect every `text` node in document order. */
-function textNodes(root: any): any[] {
-  const out: any[] = [];
-  (function walk(n: any) {
-    if (n.type === 'text') out.push(n);
-    for (const c of n.children || []) walk(c);
-  })(root);
-  return out;
-}
-
-/** Collect every `inlineCode` node in document order. */
-function inlineCodeNodes(root: any): any[] {
-  const out: any[] = [];
-  (function walk(n: any) {
-    if (n.type === 'inlineCode') out.push(n);
-    for (const c of n.children || []) walk(c);
-  })(root);
-  return out;
-}
-
-/** Collect every block `code` node in document order. */
-function codeNodes(root: any): any[] {
-  const out: any[] = [];
-  (function walk(n: any) {
-    if (n.type === 'code')
-      out.push(n);
-    for (const c of n.children || []) walk(c);
-  })(root);
-  return out;
-}
-
+/** Collect matching nodes in document order. */
 function nodesOfType(root: any, type: string): any[] {
   const out: any[] = [];
   (function walk(n: any) {
@@ -73,7 +43,7 @@ describe('parseMdWithSourceMap: non-contiguous source ranges', () => {
     ['list continuation', '- hello\n  world'],
   ])('%s rejects a range that would include container syntax', (_label, md) => {
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = textNodes(ast)[0];
+    const node = nodesOfType(ast, 'text')[0];
 
     expect(node.value).toBe('hello\nworld');
     expect(() => sourceMap.getSourceRange(node, 0, node.value.length)).toThrow(
@@ -83,7 +53,7 @@ describe('parseMdWithSourceMap: non-contiguous source ranges', () => {
 
   test('a blockquote range contained in one source segment remains available', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('> hello\n>  world');
-    const node = textNodes(ast)[0];
+    const node = nodesOfType(ast, 'text')[0];
     const range = sourceMap.getSourceRange(node, 0, 5);
 
     expect('> hello\n>  world'.slice(range.start.offset, range.end.offset)).toBe(
@@ -93,7 +63,7 @@ describe('parseMdWithSourceMap: non-contiguous source ranges', () => {
 
   test('a partial range crossing a source gap is rejected', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('> hello\n>  world');
-    const node = textNodes(ast)[0];
+    const node = nodesOfType(ast, 'text')[0];
 
     expect(() => sourceMap.getSourceRange(node, 3, 8)).toThrow(
       'getSourceRange: value range crosses non-contiguous source segments',
@@ -104,7 +74,7 @@ describe('parseMdWithSourceMap: non-contiguous source ranges', () => {
 describe('parseMdWithSourceMap: text.value → raw source', () => {
   test('backslash escape \\( maps to a 2-char source span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('\\(');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('(');
     const range = sourceMap.getSourceRange(t, 0, 1);
     expect(range.start.offset).toBe(0);
@@ -114,7 +84,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('backslash escape \\\\ maps to a 2-char source span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('\\\\');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('\\');
     const range = sourceMap.getSourceRange(t, 0, 1);
     expect(range.start.offset).toBe(0);
@@ -123,7 +93,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('named character reference &amp;', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&amp;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('&');
     // the whole '&amp;' (5 chars) decodes to one '&'.
     const range = sourceMap.getSourceRange(t, 0, 1);
@@ -133,7 +103,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('decimal numeric reference &#40;', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&#40;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('(');
     // the whole '&#40;' (5 chars) decodes to one '('.
     const range = sourceMap.getSourceRange(t, 0, 1);
@@ -143,7 +113,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('hex numeric reference &#x28;', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&#x28;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('(');
     // the whole '&#x28;' (6 chars) decodes to one '('.
     const range = sourceMap.getSourceRange(t, 0, 1);
@@ -153,7 +123,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('named reference decoding to two UTF-16 code units (&Afr;)', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&Afr;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     // 𝔄 is a surrogate pair: 2 UTF-16 code units.
     expect([...t.value]).toHaveLength(1);
     expect(t.value.length).toBe(2);
@@ -164,7 +134,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('nameless/incomplete entity &copy is kept literal', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&copy');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('&copy');
     const range = sourceMap.getSourceRange(t, 0, t.value.length);
     expect(range.start.offset).toBe(0);
@@ -173,7 +143,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('over-length numeric reference &#00000049; stays literal', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&#00000049;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('&#00000049;');
     const range = sourceMap.getSourceRange(t, 0, t.value.length);
     expect(range.start.offset).toBe(0);
@@ -182,7 +152,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('null numeric reference &#0; normalizes to replacement char', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&#0;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('�');
     const range = sourceMap.getSourceRange(t, 0, 1);
     expect(range.start.offset).toBe(0);
@@ -191,7 +161,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('C1 control numeric reference &#128; normalizes to replacement char', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&#128;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('�');
     const range = sourceMap.getSourceRange(t, 0, 1);
     expect(range.start.offset).toBe(0);
@@ -200,7 +170,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('noncharacter numeric reference &#xFDD0; normalizes to replacement char', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&#xFDD0;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('�');
     const range = sourceMap.getSourceRange(t, 0, 1);
     expect(range.start.offset).toBe(0);
@@ -211,7 +181,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
     const { ast, sourceMap } = parseMdWithSourceMap(
       '<https://example.com/?a&amp;b>',
     );
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('https://example.com/?a&amp;b');
     // The whole value is literal; no decoding happened.
     const range = sourceMap.getSourceRange(t, 0, t.value.length);
@@ -221,7 +191,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('www. autolink literal keeps &amp; literal (same as explicit autolink)', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('www.example.com/?a&amp;b');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     // GFM autolink-literal keeps the entity literal, exactly like
     // <https://...?a&amp;b>. This is the parser's real decision.
     expect(t.value).toBe('www.example.com/?a&amp;b');
@@ -238,7 +208,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('multiple escapes and references inline', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B&amp;C');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('A&B&C');
     expect(sourceMap.getSourceRange(t, 0, 5).start.offset).toBe(0);
     // "A&amp;B&amp;C" = 13 chars
@@ -251,7 +221,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('CRLF and multi-line text node maps each line ending', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('line1\r\nline2');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     // remark preserves the raw CRLF inside the text value.
     expect(t.value).toBe('line1\r\nline2');
     const range = sourceMap.getSourceRange(t, 0, t.value.length);
@@ -261,7 +231,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 
   test('getRaw of a multi-segment text node returns its full source span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('A&lt;B');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('A<B');
     expect(sourceMap.getRaw(t)).toBe('A&lt;B');
     const full = sourceMap.getSourceRange(t, 0, t.value.length);
@@ -274,7 +244,7 @@ describe('parseMdWithSourceMap: text.value → raw source', () => {
 describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
   test('maps a basic inline code value and keeps its full raw node source', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('before `value` after');
-    const node = inlineCodeNodes(ast)[0];
+    const node = nodesOfType(ast, 'inlineCode')[0];
     expect(node.value).toBe('value');
     expect(sourceMap.getRaw(node)).toBe('`value`');
     expect(sourceMap.getSourceRange(node, 0, node.value.length)).toEqual({
@@ -286,7 +256,7 @@ describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
   test('removes exactly one leading and trailing padding space', () => {
     const md = '`  a  `';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = inlineCodeNodes(ast)[0];
+    const node = nodesOfType(ast, 'inlineCode')[0];
     expect(node.value).toBe(' a ');
     expect(sourceMap.getRaw(node)).toBe(md);
     const whole = sourceMap.getSourceRange(node, 0, node.value.length);
@@ -299,7 +269,7 @@ describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
     (lineEnding) => {
       const md = '`' + lineEnding + 'a' + lineEnding + '`';
       const { ast, sourceMap } = parseMdWithSourceMap(md);
-      const node = inlineCodeNodes(ast)[0];
+      const node = nodesOfType(ast, 'inlineCode')[0];
       expect(node.value).toBe('a');
 
       const range = sourceMap.getSourceRange(node, 0, 1);
@@ -316,7 +286,7 @@ describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
   test('maps a value containing backticks between multi-backtick delimiters', () => {
     const md = '`` `value` ``';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = inlineCodeNodes(ast)[0];
+    const node = nodesOfType(ast, 'inlineCode')[0];
     expect(node.value).toBe('`value`');
     expect(sourceMap.getRaw(node)).toBe(md);
     expect(sourceMap.getSourceRange(node, 0, node.value.length)).toEqual({
@@ -330,7 +300,7 @@ describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
     (lineEnding) => {
       const md = '` a' + lineEnding + 'b `';
       const { ast, sourceMap } = parseMdWithSourceMap(md);
-      const node = inlineCodeNodes(ast)[0];
+      const node = nodesOfType(ast, 'inlineCode')[0];
       expect(node.value).toBe('a' + lineEnding + 'b');
 
       const whole = sourceMap.getSourceRange(node, 0, node.value.length);
@@ -358,7 +328,7 @@ describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
 
   test('rejects an inlineCode value modified after parsing', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('`value`');
-    const node = inlineCodeNodes(ast)[0];
+    const node = nodesOfType(ast, 'inlineCode')[0];
     node.value = 'changed';
     expect(() => sourceMap.getSourceRange(node, 0, 1)).toThrow(
       SourceMapConsistencyError,
@@ -393,7 +363,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     (lineEnding) => {
       const md = `\`\`\`ts meta${lineEnding}a${lineEnding}b${lineEnding}\`\`\``;
       const { ast, sourceMap } = parseMdWithSourceMap(md);
-      const node = codeNodes(ast)[0];
+      const node = nodesOfType(ast, 'code')[0];
       expect(node.value).toBe(`a${lineEnding}b`);
       expect(sourceMap.getRaw(node)).toBe(md);
       const whole = sourceMap.getSourceRange(node, 0, node.value.length);
@@ -408,7 +378,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps indented code line by line, including a blank line', () => {
     const md = '    a\r\n\r\n    b\r\n';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('a\r\n\r\nb');
     expect(sourceMap.getRaw(node)).toBe('    a\r\n\r\n    b');
     expect(() => sourceMap.getSourceRange(node, 0, node.value.length)).toThrow(
@@ -422,7 +392,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     (indentation) => {
       const md = indentation + 'a\n';
       const { ast, sourceMap } = parseMdWithSourceMap(md);
-      const node = codeNodes(ast)[0];
+      const node = nodesOfType(ast, 'code')[0];
       const value = indentation === '\t\t' ? '\ta' : 'a';
       expect(node.value).toBe(value);
       const range = sourceMap.getSourceRange(node, 0, node.value.length);
@@ -433,7 +403,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps tilde-fenced code', () => {
     const md = '~~~\r\nvalue\r\n~~~';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('value');
     expect(sourceMap.getRaw(node)).toBe(md);
     expect(sourceMap.getSourceRange(node, 0, node.value.length)).toEqual({
@@ -445,7 +415,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps fenced code inside a blockquote', () => {
     const md = '> ```js\n> const x = 1\n> ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('const x = 1');
     const range = sourceMap.getSourceRange(node, 0, node.value.length);
     expect(md.slice(range.start.offset, range.end.offset)).toContain('const x = 1');
@@ -456,7 +426,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     (fence) => {
       const md = '> \t' + fence + '\n> \tcode\n> \t' + fence;
       const { ast, sourceMap } = parseMdWithSourceMap(md);
-      const node = codeNodes(ast)[0];
+      const node = nodesOfType(ast, 'code')[0];
       expect(node.value).toBe('code');
       const range = sourceMap.getSourceRange(node, 0, node.value.length);
       expect(md.slice(range.start.offset, range.end.offset)).toBe('code');
@@ -466,7 +436,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps a fenced code block with equivalent tab and space indentation', () => {
     const md = '> \t```\n> \tcode\n>  ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('code');
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
@@ -474,7 +444,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps indented code inside a blockquote', () => {
     const md = '>     indented\n>     code';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('indented\ncode');
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
@@ -482,7 +452,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps fenced code nested in a list', () => {
     const md = '- item\n    ```\n    value\n    ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('value');
     const range = sourceMap.getSourceRange(node, 0, node.value.length);
     expect(md.slice(range.start.offset, range.end.offset)).toBe('value');
@@ -491,7 +461,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps fenced code in a list with equivalent tab and space indentation', () => {
     const md = '- item\n\t```\n    code\n\t```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('code');
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
@@ -499,7 +469,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps multi-line indented code inside a list', () => {
     const md = '- Foo\n\n      bar\n      baz';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('bar\nbaz');
     expect(() => sourceMap.getSourceRange(node, 0, node.value.length)).toThrow(
       'getSourceRange: value range crosses non-contiguous source segments',
@@ -513,7 +483,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
       const md = '- Foo' + lineEnding + lineEnding
         + '\t  bar' + lineEnding + '\t  baz';
       const { ast, sourceMap } = parseMdWithSourceMap(md);
-      const node = codeNodes(ast)[0];
+      const node = nodesOfType(ast, 'code')[0];
       expect(node.value).toBe('bar' + lineEnding + 'baz');
       expectPerCodeUnitRanges(md, node, sourceMap);
     },
@@ -522,7 +492,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps multi-line indented code inside a blockquote list', () => {
     const md = '> - Foo\n>\n>       bar\n>       baz';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('bar\nbaz');
     expect(() => sourceMap.getSourceRange(node, 0, node.value.length)).toThrow(
       'getSourceRange: value range crosses non-contiguous source segments',
@@ -533,7 +503,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps multi-line indented code with a tab inside a blockquote list', () => {
     const md = '> - Foo\n>\n>     \tbar\n>     \tbaz';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('bar\nbaz');
     expectPerCodeUnitRanges(md, node, sourceMap);
   });
@@ -541,7 +511,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps empty fenced code inside a blockquote', () => {
     const md = '> ```\n> ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('');
     const point = sourceMap.getSourceRange(node, 0, 0);
     expect(point.start.offset).toBe(md.lastIndexOf('```'));
@@ -550,7 +520,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps empty fenced code inside a list', () => {
     const md = '- item\n    ```\n    ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     const point = sourceMap.getSourceRange(node, 0, 0);
     expect(point.start.offset).toBe(md.lastIndexOf('```'));
   });
@@ -558,7 +528,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('excludes fenced delimiters and their indentation from code ranges', () => {
     const md = '  ```\n  a\n  b\n  ```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('a\nb');
     expect(sourceMap.getRaw(node)).toBe('```\n  a\n  b\n  ```');
     expect(sourceMap.getSourceRange(node, 0, 1).start.offset).toBe(md.indexOf('a'));
@@ -568,7 +538,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
   test('maps an empty fenced code value to its content boundary', () => {
     const md = '```\n\n```';
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('');
     expect(sourceMap.getRaw(node)).toBe(md);
     expect(sourceMap.getSourceRange(node, 0, 0).start.offset).toBe(4);
@@ -583,7 +553,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     ['```\r\n', 5],
   ])('maps an unclosed empty fence to EOF: %p', (md, expectedOffset) => {
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('');
     const point = sourceMap.getSourceRange(node, 0, 0);
     expect(point.start.offset).toBe(expectedOffset);
@@ -597,7 +567,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     ['> ```\r\n', 7],
   ])('maps an unclosed empty fence inside a blockquote to EOF: %p', (md, expectedOffset) => {
     const { ast, sourceMap } = parseMdWithSourceMap(md);
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     expect(node.value).toBe('');
     const point = sourceMap.getSourceRange(node, 0, 0);
     expect(point.start.offset).toBe(expectedOffset);
@@ -606,7 +576,7 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
 
   test('rejects a code value modified after parsing', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('```\nvalue\n```');
-    const node = codeNodes(ast)[0];
+    const node = nodesOfType(ast, 'code')[0];
     node.value = 'changed';
     expect(() => sourceMap.getSourceRange(node, 0, 1)).toThrow(
       SourceMapConsistencyError,
@@ -755,7 +725,7 @@ describe('parseMdWithSourceMap: URL fields → raw source', () => {
 describe('parseMdWithSourceMap: contract', () => {
   test('getSourceRange start..end covers the whole text node value', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('a &amp; b');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const range = sourceMap.getSourceRange(t, 0, t.value.length);
     expect(range.start.offset).toBe(0);
     // source is "a &amp; b" = 9 chars
@@ -764,14 +734,14 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('segments are gap-free and monotonic over the value', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('x&amp;y\\(z');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const full = sourceMap.getSourceRange(t, 0, t.value.length);
     expect(full.end.offset).toBeGreaterThanOrEqual(full.start.offset);
   });
 
   test('getSourceRange throws RangeError for out-of-bounds range', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('hello');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(() => sourceMap.getSourceRange(t, 0, 99)).toThrow(RangeError);
   });
 
@@ -800,7 +770,7 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('atomic entity is not split: any intersecting value range maps to full source span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&Afr;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     // '&Afr;' decodes to a surrogate pair (2 UTF-16 units); requesting either
     // unit must return the complete '&Afr;' source span, never a half-entity.
     expect(sourceMap.getSourceRange(t, 0, 1)).toEqual({
@@ -815,7 +785,7 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('escape is atomic: requesting the single decoded char returns full escape span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('\\(');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(sourceMap.getSourceRange(t, 0, 1)).toEqual({
       start: { line: 1, column: 1, offset: 0 },
       end: { line: 1, column: 3, offset: 2 },
@@ -824,14 +794,14 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('literal segments still support per-code-unit boundaries', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('ab');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(sourceMap.getSourceRange(t, 0, 1).end.offset).toBe(1);
     expect(sourceMap.getSourceRange(t, 1, 2).start.offset).toBe(1);
   });
 
   test('CR-only line ending produces correct line/column', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('a\rb');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const range = sourceMap.getSourceRange(t, 0, t.value.length);
     // matches the parser's own text node end position.
     expect(range.end).toEqual({ line: 2, column: 2, offset: 3 });
@@ -839,7 +809,7 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('CRLF line ending produces correct line/column', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('a\r\nb');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const range = sourceMap.getSourceRange(t, 0, t.value.length);
     expect(range.start).toEqual({ line: 1, column: 1, offset: 0 });
     expect(range.end).toEqual({ line: 2, column: 2, offset: 4 });
@@ -847,7 +817,7 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('astral Unicode advances column by UTF-16 code units', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('a🎉b');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const range = sourceMap.getSourceRange(t, 0, t.value.length);
     // parser reports end { line: 1, column: 5, offset: 4 }.
     expect(range.end).toEqual({ line: 1, column: 5, offset: 4 });
@@ -860,7 +830,7 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('half-surrogate range inside a literal astral run stays contiguous', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('🎉');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const range = sourceMap.getSourceRange(t, 0, 2);
     expect(range.start.offset).toBe(0);
     expect(range.end.offset).toBe(2);
@@ -868,7 +838,7 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('illegal numeric reference maps atomically and keeps full raw span', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&#0;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const range = sourceMap.getSourceRange(t, 0, 1);
     expect(range.start.offset).toBe(0);
     expect(range.end.offset).toBe(4);
@@ -880,19 +850,19 @@ describe('parseMdWithSourceMap: contract', () => {
   test('zero-length range resolves to an accurate source point', () => {
     // 'ab' literal -> [0,0) point at offset 0, [2,2) point at offset 2.
     const ab = parseMdWithSourceMap('ab');
-    const tAb = textNodes(ab.ast)[0];
+    const tAb = nodesOfType(ab.ast, 'text')[0];
     expect(ab.sourceMap.getSourceRange(tAb, 0, 0).start.offset).toBe(0);
     expect(ab.sourceMap.getSourceRange(tAb, 2, 2).start.offset).toBe(2);
 
     // '&amp;' -> value '&'; [0,0) is the entity's start = source offset 0.
     const amp = parseMdWithSourceMap('&amp;');
-    const tAmp = textNodes(amp.ast)[0];
+    const tAmp = nodesOfType(amp.ast, 'text')[0];
     expect(amp.sourceMap.getSourceRange(tAmp, 0, 0).start.offset).toBe(0);
 
     // '&amp;&copy;' -> value '&©'; [1,1) sits between the two entities at
     // source offset 5 (an accurate boundary, not inside an atomic construct).
     const adj = parseMdWithSourceMap('&amp;&copy;');
-    const tAdj = textNodes(adj.ast)[0];
+    const tAdj = nodesOfType(adj.ast, 'text')[0];
     expect(adj.sourceMap.getSourceRange(tAdj, 1, 1).start.offset).toBe(5);
   });
 
@@ -900,13 +870,13 @@ describe('parseMdWithSourceMap: contract', () => {
     // '&Afr;' decodes to a surrogate pair (value length 2); [1,1) lands inside
     // the atomic entity, where no accurate source boundary exists.
     const { ast, sourceMap } = parseMdWithSourceMap('&Afr;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(() => sourceMap.getSourceRange(t, 1, 1)).toThrow(RangeError);
   });
 
   test('valueEnd does not swallow the following entity/escape (P1)', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     // 'A&amp;B' decodes to 'A&B'; the range [0, 1) is only the literal 'A'.
     const r = sourceMap.getSourceRange(t, 0, 1);
     expect(r.start.offset).toBe(0);
@@ -919,7 +889,7 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('adjacent entities: first range does not include the second (P1)', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('&amp;&copy;');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const r = sourceMap.getSourceRange(t, 0, 1);
     expect(r.start.offset).toBe(0);
     expect(r.end.offset).toBe(5);
@@ -942,7 +912,7 @@ describe('parseMdWithSourceMap: contract', () => {
 
   test('getSourceRange rejects non-integer indices (P4)', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('ab');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(() => sourceMap.getSourceRange(t, 0.5, 1)).toThrow(RangeError);
     expect(() => sourceMap.getSourceRange(t, 0, Infinity)).toThrow(RangeError);
   });
@@ -1046,7 +1016,7 @@ describe('parseMdWithSourceMap: error lifecycle', () => {
 
   test('querying a modified text node throws SourceMapConsistencyError', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     expect(t.value).toBe('A&B');
     t.value = 'changed';
     const err = thrown(() => sourceMap.getSourceRange(t, 0, 1));
@@ -1061,7 +1031,7 @@ describe('parseMdWithSourceMap: error lifecycle', () => {
 
   test('getRaw on a modified text node throws SourceMapConsistencyError', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     t.value = 'changed';
     const err = thrown(() => sourceMap.getRaw(t));
     expect(err).toBeInstanceOf(SourceMapConsistencyError);
@@ -1070,7 +1040,7 @@ describe('parseMdWithSourceMap: error lifecycle', () => {
 
   test('reassigning the identical value keeps the mapping valid', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     t.value = 'A&B'; // same content as parsed
     expect(sourceMap.getSourceRange(t, 1, 2).start.offset).toBe(1);
     expect(sourceMap.getRaw(t)).toBe('A&amp;B');
@@ -1130,7 +1100,7 @@ describe('parseMdWithSourceMap: error lifecycle', () => {
 
   test('caller argument errors stay plain RangeError (not SourceMapError)', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('ab');
-    const t = textNodes(ast)[0];
+    const t = nodesOfType(ast, 'text')[0];
     const cases: Array<() => unknown> = [
       () => sourceMap.getSourceRange(t, 0, 99), // out of bounds
       () => sourceMap.getSourceRange(t, 0.5, 1), // non-integer
@@ -1144,7 +1114,7 @@ describe('parseMdWithSourceMap: error lifecycle', () => {
     // An empty range inside a multi-code-unit atomic construct is also a
     // caller-facing range error, not a mapping availability problem.
     const afr = parseMdWithSourceMap('&Afr;');
-    const tAfr = textNodes(afr.ast)[0];
+    const tAfr = nodesOfType(afr.ast, 'text')[0];
     const err = thrown(() => afr.sourceMap.getSourceRange(tAfr, 1, 1));
     expect(err).toBeInstanceOf(RangeError);
     expect(err).not.toBeInstanceOf(SourceMapError);
@@ -1153,8 +1123,8 @@ describe('parseMdWithSourceMap: error lifecycle', () => {
   test('maps from two parses stay isolated and each serves its own nodes', () => {
     const a = parseMdWithSourceMap('A&amp;B');
     const b = parseMdWithSourceMap('C&amp;D');
-    const tA = textNodes(a.ast)[0];
-    const tB = textNodes(b.ast)[0];
+    const tA = nodesOfType(a.ast, 'text')[0];
+    const tB = nodesOfType(b.ast, 'text')[0];
     expect(a.sourceMap.getRaw(tA)).toBe('A&amp;B');
     expect(b.sourceMap.getRaw(tB)).toBe('C&amp;D');
     expect(a.sourceMap.getSourceRange(tA, 0, 3).end.offset).toBe(7);
@@ -1189,7 +1159,7 @@ describe('parseMdWithSourceMap: range resolution regression matrix', () => {
       name: 'a modified node takes priority over an out-of-bounds range',
       run: () => {
         const { ast, sourceMap } = parseMdWithSourceMap('hello');
-        const node = textNodes(ast)[0];
+        const node = nodesOfType(ast, 'text')[0];
         node.value = 'changed';
         return sourceMap.getSourceRange(node, 0, 99);
       },
@@ -1202,7 +1172,7 @@ describe('parseMdWithSourceMap: range resolution regression matrix', () => {
       name: 'an empty range inside an atomic segment stays invalid',
       run: () => {
         const { ast, sourceMap } = parseMdWithSourceMap('&Afr;');
-        return sourceMap.getSourceRange(textNodes(ast)[0], 1, 1);
+        return sourceMap.getSourceRange(nodesOfType(ast, 'text')[0], 1, 1);
       },
       error: {
         name: 'RangeError',
@@ -1213,7 +1183,7 @@ describe('parseMdWithSourceMap: range resolution regression matrix', () => {
       name: 'a text range crossing a source gap stays invalid',
       run: () => {
         const { ast, sourceMap } = parseMdWithSourceMap('> hello\n> world');
-        const node = textNodes(ast)[0];
+        const node = nodesOfType(ast, 'text')[0];
         return sourceMap.getSourceRange(node, 0, node.value.length);
       },
       error: {
