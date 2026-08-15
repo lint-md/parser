@@ -50,6 +50,21 @@ interface RecordingState {
   urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
+interface TraversableNode {
+  type: string
+  position?: ParsedPosition
+  children?: TraversableNode[]
+  value?: unknown
+  url?: unknown
+}
+
+function hasStringField<Field extends 'value' | 'url'>(
+  node: TraversableNode,
+  field: Field,
+): node is TraversableNode & Record<Field, string> {
+  return field in node && typeof node[field] === 'string';
+}
+
 // micromark limits named character references to 31 code units; numeric
 // references are shorter. Include the leading `&` and trailing `;` so URL
 // mapping only considers parser-valid candidates and never scans an entire
@@ -556,16 +571,22 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
   const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
 
-  function indexNode(node: any): void {
+  function indexNode(node: TraversableNode): void {
     // The standard mdast handler compiles inline code.
     // The completed node contains enough data to build its mapping.
-    if (node.type === 'inlineCode' && typeof node.value === 'string') {
+    if (
+      node.type === 'inlineCode'
+      && hasStringField(node, 'value')
+    ) {
       const segments = buildInlineCodeSegments(md, node);
       if (segments)
         state.inlineCodeSegments.set(node, segments);
     }
 
-    if (node.type === 'code' && typeof node.value === 'string') {
+    if (
+      node.type === 'code'
+      && hasStringField(node, 'value')
+    ) {
       const mapping = buildCodeSegments(md, node);
       if (mapping) {
         state.codeSegments.set(node, mapping.segments);
@@ -577,7 +598,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
 
     if (
       (node.type === 'link' || node.type === 'definition')
-      && typeof node.url === 'string'
+      && hasStringField(node, 'url')
     ) {
       const bounds = state.urlSourceSpans.get(node);
       const segments = bounds ? buildUrlSegments(md, node, bounds) : undefined;
@@ -593,12 +614,17 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       || state.inlineCodeSegments.get(node)
       || state.codeSegments.get(node);
     if (mappedSegments) {
-      originalValues.set(node, node.value);
+      if (hasStringField(node, 'value'))
+        originalValues.set(node, node.value);
       sourceGapPrefixes.set(mappedSegments, buildSourceGapPrefix(mappedSegments));
     }
-    if (state.urlSegments.has(node))
+    if (
+      state.urlSegments.has(node)
+      && hasStringField(node, 'url')
+    ) {
       originalUrls.set(node, node.url);
-    const position = (node as { position?: ParsedPosition }).position;
+    }
+    const position = node.position;
     if (position && position.start && position.end) {
       originalOffsets.set(node, [position.start.offset, position.end.offset]);
     }
