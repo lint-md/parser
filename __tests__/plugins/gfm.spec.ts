@@ -1,3 +1,4 @@
+import type { PhrasingContent } from 'mdast';
 import { parseMd } from '../helpers';
 
 describe('remark-gfm plugin', () => {
@@ -41,7 +42,9 @@ describe('remark-gfm plugin', () => {
     const paragraph = root.children[0];
     expect(paragraph.type).toBe('paragraph');
     if (paragraph.type === 'paragraph') {
-      const ref = paragraph.children.find((child) => child.type === 'footnoteReference');
+      const ref = paragraph.children.find(
+        (child: PhrasingContent) => child.type === 'footnoteReference',
+      );
       expect(ref).toBeDefined();
       if (ref?.type === 'footnoteReference') {
         expect(ref.identifier).toBe('1');
