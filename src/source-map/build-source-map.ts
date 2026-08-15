@@ -345,6 +345,176 @@ function buildSourceGapPrefix(segs: MarkdownSourceMapSegment[]): number[] {
   return prefix;
 }
 
+interface RangeResolutionMessages {
+  invalidIndices: (valueStart: number, valueEnd: number) => string
+  outOfBounds: (valueStart: number, valueEnd: number, valueLength: number) => string
+  incomplete: string
+  atomicEmpty: string
+  nonContiguous: string
+}
+
+interface SegmentRangeOptions {
+  segments: MarkdownSourceMapSegment[]
+  valueLength: number
+  valueStart: number
+  valueEnd: number
+  emptyOffset?: number
+  sourceGapPrefix?: number[]
+  requireContiguousSource?: boolean
+  messages: RangeResolutionMessages
+  lineStarts: number[]
+  source: string
+}
+
+const sourceRangeMessages: RangeResolutionMessages = {
+  invalidIndices: (valueStart, valueEnd) =>
+    'getSourceRange: valueStart and valueEnd must be finite integers, '
+    + `got [${valueStart}, ${valueEnd})`,
+  outOfBounds: (valueStart, valueEnd, valueLength) =>
+    `getSourceRange: value range [${valueStart}, ${valueEnd}) is out of `
+    + `bounds for a mapped node of length ${valueLength}`,
+  incomplete: 'getSourceRange: value range is not fully covered by the source map',
+  atomicEmpty: 'getSourceRange: empty range falls inside an atomic construct '
+    + '(escape / character reference / normalization) where no accurate '
+    + 'source boundary exists',
+  nonContiguous: 'getSourceRange: value range crosses non-contiguous source segments',
+};
+
+const fieldRangeMessages: RangeResolutionMessages = {
+  invalidIndices: () =>
+    'getFieldSourceRange: valueStart and valueEnd must be finite integers',
+  outOfBounds: (valueStart, valueEnd) =>
+    `getFieldSourceRange: value range [${valueStart}, ${valueEnd}) is out of bounds`,
+  incomplete: 'getFieldSourceRange: range is not fully mapped',
+  atomicEmpty: 'getFieldSourceRange: empty range falls inside an atomic construct',
+  nonContiguous: 'getFieldSourceRange: range crosses non-contiguous source segments',
+};
+
+function validateValueRange(
+  valueStart: number,
+  valueEnd: number,
+  messages: RangeResolutionMessages,
+): (valueLength: number) => void {
+  if (
+    !Number.isInteger(valueStart)
+    || !Number.isInteger(valueEnd)
+    || !Number.isFinite(valueStart)
+    || !Number.isFinite(valueEnd)
+  ) {
+    throw new RangeError(messages.invalidIndices(valueStart, valueEnd));
+  }
+  // The caller first confirms that the field has a mapping.
+  return (valueLength: number) => {
+    if (valueStart < 0 || valueEnd > valueLength || valueStart > valueEnd) {
+      throw new RangeError(
+        messages.outOfBounds(valueStart, valueEnd, valueLength),
+      );
+    }
+  };
+}
+
+function sourceOffsetAt(
+  segments: MarkdownSourceMapSegment[],
+  valueLength: number,
+  valueIndex: number,
+  pastUnit: boolean,
+  incompleteMessage: string,
+): number {
+  const segment = findSegmentAt(segments, valueIndex);
+  if (!segment) {
+    if (valueIndex === valueLength && segments.length > 0)
+      return segments[segments.length - 1].sourceEnd;
+    throw new RangeError(incompleteMessage);
+  }
+  if (segment.kind !== 'literal')
+    return pastUnit ? segment.sourceEnd : segment.sourceStart;
+  const units = (pastUnit ? valueIndex + 1 : valueIndex) - segment.valueStart;
+  return segment.sourceStart + units;
+}
+
+function resolveEmptyRange(
+  options: SegmentRangeOptions,
+): number {
+  const {
+    segments,
+    valueLength,
+    valueStart,
+    emptyOffset,
+    messages,
+  } = options;
+  if (segments.length === 0) {
+    if (valueLength === 0 && valueStart === 0 && emptyOffset !== undefined)
+      return emptyOffset;
+    throw new RangeError(messages.incomplete);
+  }
+  if (valueStart === 0)
+    return segments[0].sourceStart;
+  if (valueStart === valueLength)
+    return segments[segments.length - 1].sourceEnd;
+  const segment = findSegmentAt(segments, valueStart);
+  if (segment && valueStart === segment.valueStart)
+    return segment.sourceStart;
+  if (segment?.kind === 'literal')
+    return segment.sourceStart + valueStart - segment.valueStart;
+  throw new RangeError(messages.atomicEmpty);
+}
+
+function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
+  const {
+    segments,
+    valueLength,
+    valueStart,
+    valueEnd,
+    sourceGapPrefix,
+    requireContiguousSource,
+    messages,
+    lineStarts,
+    source,
+  } = options;
+  const pointRange = (offset: number): ParsedPosition => {
+    const point = pointAtOffset(lineStarts, source, offset);
+    return { start: point, end: point };
+  };
+
+  if (valueStart === valueEnd)
+    return pointRange(resolveEmptyRange(options));
+  if (segments.length === 0)
+    throw new RangeError(messages.incomplete);
+
+  const startSegmentIndex = findSegmentIndexAt(segments, valueStart);
+  const endSegmentIndex = findSegmentIndexAt(segments, valueEnd - 1);
+  if (startSegmentIndex === undefined || endSegmentIndex === undefined)
+    throw new RangeError(messages.incomplete);
+  if (
+    requireContiguousSource
+    && (
+      !sourceGapPrefix
+      || sourceGapPrefix[endSegmentIndex] !== sourceGapPrefix[startSegmentIndex]
+    )
+  ) {
+    throw new RangeError(messages.nonContiguous);
+  }
+
+  const startOffset = sourceOffsetAt(
+    segments,
+    valueLength,
+    valueStart,
+    false,
+    messages.incomplete,
+  );
+  const endOffset = sourceOffsetAt(
+    segments,
+    valueLength,
+    valueEnd - 1,
+    true,
+    messages.incomplete,
+  );
+  return {
+    start: pointAtOffset(lineStarts, source, startOffset),
+    end: pointAtOffset(lineStarts, source, endOffset),
+  };
+}
+
 /**
  * Parse Markdown and additionally produce a sidecar source map that resolves
  * supported normalized-value fields back to the raw Markdown source.
@@ -532,17 +702,11 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
             + 'parseMdWithSourceMap() call',
         );
       }
-      if (
-        !Number.isInteger(valueStart)
-        || !Number.isInteger(valueEnd)
-        || !Number.isFinite(valueStart)
-        || !Number.isFinite(valueEnd)
-      ) {
-        throw new RangeError(
-          'getSourceRange: valueStart and valueEnd must be finite integers, '
-            + `got [${valueStart}, ${valueEnd})`,
-        );
-      }
+      const validateBounds = validateValueRange(
+        valueStart,
+        valueEnd,
+        sourceRangeMessages,
+      );
       const segs = state.segments.get(node as object)
         || state.inlineCodeSegments.get(node as object)
         || state.codeSegments.get(node as object);
@@ -554,131 +718,19 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         );
       }
       assertUnmodified(node as object);
-      if (
-        valueStart < 0
-        || valueEnd > node.value.length
-        || valueStart > valueEnd
-      ) {
-        throw new RangeError(
-          `getSourceRange: value range [${valueStart}, ${valueEnd}) is out of `
-            + `bounds for a mapped node of length ${node.value.length}`,
-        );
-      }
-
-      if (segs.length === 0) {
-        const emptyOffset = state.emptyCodeOffsets.get(node as object);
-        if (node.value.length === 0 && valueStart === 0 && valueEnd === 0 && emptyOffset !== undefined) {
-          const sourcePoint = pointAtOffset(lineStarts, md, emptyOffset);
-          return { start: sourcePoint, end: sourcePoint };
-        }
-        throw new RangeError(
-          'getSourceRange: value range is not fully covered by the source map',
-        );
-      }
-
-      // Escapes / character references / normalizations are atomic: the parser
-      // produced them as a single unit, so any value range intersecting such a
-      // segment must map back to that segment's *complete* source span. Only
-      // `literal` segments support per-code-unit boundaries (they are 1:1).
-      //
-      // The start boundary is the segment containing `valueStart`; the end
-      // boundary is the segment containing `valueEnd - 1` (the last value unit
-      // included), so a range that stops exactly at an atomic segment's start
-      // does NOT pull that segment in. An empty range is valid at the document
-      // value boundaries, at any exact segment boundary, and inside literal
-      // segments. It throws only when it falls inside a multi-code-unit atomic
-      // segment.
-      //
-      // `pastUnit` distinguishes the start of a unit (false) from the offset
-      // just *after* the unit (true). For a literal segment the source offset
-      // is `sourceStart + unitsConsumed`, where `unitsConsumed` counts value
-      // units from the segment's own start.
-      const sourceOffsetAt = (
-        valueIndex: number,
-        pastUnit: boolean,
-      ): number => {
-        const seg = findSegmentAt(segs, valueIndex);
-        if (!seg) {
-          // A range end exactly at the mapped value boundary.
-          if (valueIndex === node.value.length && segs.length > 0) {
-            return segs[segs.length - 1].sourceEnd;
-          }
-          throw new RangeError(
-            'getSourceRange: value range is not fully covered by the source map',
-          );
-        }
-        if (seg.kind !== 'literal') {
-          return pastUnit ? seg.sourceEnd : seg.sourceStart;
-        }
-        // Literal: 1:1 UTF-16 mapping. `units` counts value units from the
-        // segment's own start; `pastUnit` makes it count one extra (the offset
-        // just *after* the unit), so a range ending at `valueEnd` maps to
-        // `sourceStart + (valueEnd - seg.valueStart)`.
-        const units = (pastUnit ? valueIndex + 1 : valueIndex) - seg.valueStart;
-        return seg.sourceStart + units;
-      };
-
-      const assertContiguousSourceRange = (
-        startIndex: number,
-        endIndex: number,
-      ): void => {
-        const startSegmentIndex = findSegmentIndexAt(segs, startIndex);
-        const endSegmentIndex = findSegmentIndexAt(segs, endIndex);
-        if (startSegmentIndex === undefined || endSegmentIndex === undefined) {
-          throw new RangeError(
-            'getSourceRange: value range is not fully covered by the source map',
-          );
-        }
-        const gapPrefix = sourceGapPrefixes.get(segs);
-        if (
-          !gapPrefix
-          || gapPrefix[endSegmentIndex] !== gapPrefix[startSegmentIndex]
-        ) {
-          throw new RangeError(
-            'getSourceRange: value range crosses non-contiguous source segments',
-          );
-        }
-      };
-
-      // An empty range [i, i) denotes a single source point. Resolve it
-      // directly: only a multi-code-unit atomic construct (escape / character
-      // reference / normalization) has no accurate boundary inside it.
-      if (valueStart === valueEnd) {
-        const index = valueStart;
-        const pointRange = (offset: number): ParsedPosition => ({
-          start: pointAtOffset(lineStarts, md, offset),
-          end: pointAtOffset(lineStarts, md, offset),
-        });
-        if (index === 0) {
-          return pointRange(segs[0].sourceStart);
-        }
-        if (index === node.value.length) {
-          return pointRange(segs[segs.length - 1].sourceEnd);
-        }
-        const seg = findSegmentAt(segs, index);
-        // Exactly at a segment's start: accurate boundary.
-        if (seg && index === seg.valueStart) {
-          return pointRange(seg.sourceStart);
-        }
-        // A boundary inside a literal segment is 1:1 accurate.
-        if (seg?.kind === 'literal') {
-          return pointRange(seg.sourceStart + index - seg.valueStart);
-        }
-        // Inside a multi-code-unit atomic segment: no accurate boundary.
-        throw new RangeError(
-          'getSourceRange: empty range falls inside an atomic construct '
-            + '(escape / character reference / normalization) where no '
-            + 'accurate source boundary exists',
-        );
-      }
-
-      const startOffset = sourceOffsetAt(valueStart, false);
-      const endOffset = sourceOffsetAt(valueEnd === 0 ? 0 : valueEnd - 1, true);
-      assertContiguousSourceRange(valueStart, valueEnd - 1);
-      return {
-        start: pointAtOffset(lineStarts, md, startOffset),
-        end: pointAtOffset(lineStarts, md, endOffset),
-      };
+      validateBounds(node.value.length);
+      return resolveSegmentRange({
+        segments: segs,
+        valueLength: node.value.length,
+        valueStart,
+        valueEnd,
+        emptyOffset: state.emptyCodeOffsets.get(node as object),
+        sourceGapPrefix: sourceGapPrefixes.get(segs),
+        requireContiguousSource: true,
+        messages: sourceRangeMessages,
+        lineStarts,
+        source: md,
+      });
     },
 
     getFieldSourceRange(
@@ -697,11 +749,11 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
           `getFieldSourceRange: no source mapping is available for field ${field}`,
         );
       }
-      if (!Number.isInteger(valueStart) || !Number.isInteger(valueEnd)) {
-        throw new RangeError(
-          'getFieldSourceRange: valueStart and valueEnd must be finite integers',
-        );
-      }
+      const validateBounds = validateValueRange(
+        valueStart,
+        valueEnd,
+        fieldRangeMessages,
+      );
       const segs = state.urlSegments.get(node as object);
       if (!segs) {
         throw new SourceMapUnavailableError(
@@ -709,50 +761,17 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         );
       }
       assertUrlUnmodified(node as object);
-      if (valueStart < 0 || valueEnd > node.url.length || valueStart > valueEnd) {
-        throw new RangeError(
-          `getFieldSourceRange: value range [${valueStart}, ${valueEnd}) is out of bounds`,
-        );
-      }
-      const sourceOffsetAt = (valueIndex: number, pastUnit: boolean): number => {
-        const seg = findSegmentAt(segs, valueIndex);
-        if (!seg) {
-          if (valueIndex === node.url.length)
-            return segs[segs.length - 1].sourceEnd;
-          throw new RangeError('getFieldSourceRange: range is not fully mapped');
-        }
-        if (seg.kind !== 'literal')
-          return pastUnit ? seg.sourceEnd : seg.sourceStart;
-        return seg.sourceStart + (pastUnit ? valueIndex + 1 : valueIndex) - seg.valueStart;
-      };
-      if (valueStart === valueEnd) {
-        const pointRange = (offset: number): ParsedPosition => {
-          const sourcePoint = pointAtOffset(lineStarts, md, offset);
-          return { start: sourcePoint, end: sourcePoint };
-        };
-        if (segs.length === 0) {
-          const emptyOffset = state.emptyUrlOffsets.get(node as object);
-          if (node.url.length === 0 && valueStart === 0 && emptyOffset !== undefined) {
-            return pointRange(emptyOffset);
-          }
-          throw new RangeError('getFieldSourceRange: range is not fully mapped');
-        }
-        if (valueStart === 0)
-          return pointRange(segs[0].sourceStart);
-        if (valueStart === node.url.length)
-          return pointRange(segs[segs.length - 1].sourceEnd);
-        const seg = findSegmentAt(segs, valueStart);
-        if (seg && valueStart === seg.valueStart)
-          return pointRange(seg.sourceStart);
-        if (seg?.kind === 'literal') {
-          return pointRange(seg.sourceStart + valueStart - seg.valueStart);
-        }
-        throw new RangeError('getFieldSourceRange: empty range falls inside an atomic construct');
-      }
-      return {
-        start: pointAtOffset(lineStarts, md, sourceOffsetAt(valueStart, false)),
-        end: pointAtOffset(lineStarts, md, sourceOffsetAt(valueEnd - 1, true)),
-      };
+      validateBounds(node.url.length);
+      return resolveSegmentRange({
+        segments: segs,
+        valueLength: node.url.length,
+        valueStart,
+        valueEnd,
+        emptyOffset: state.emptyUrlOffsets.get(node as object),
+        messages: fieldRangeMessages,
+        lineStarts,
+        source: md,
+      });
     },
   };
 

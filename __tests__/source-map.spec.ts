@@ -1162,6 +1162,86 @@ describe('parseMdWithSourceMap: error lifecycle', () => {
   });
 });
 
+describe('parseMdWithSourceMap: range resolution regression matrix', () => {
+  interface RangeResolutionCase {
+    name: string
+    run: () => any
+    error?: {
+      name: string
+      message: string
+    }
+    offsets?: readonly [number, number]
+  }
+
+  const cases: RangeResolutionCase[] = [
+    {
+      name: 'invalid index takes priority over an unsupported mapping',
+      run: () => {
+        const { ast, sourceMap } = parseMdWithSourceMap('hello');
+        return sourceMap.getSourceRange(ast.children[0] as any, 0.5, 1);
+      },
+      error: {
+        name: 'RangeError',
+        message: 'getSourceRange: valueStart and valueEnd must be finite integers, got [0.5, 1)',
+      },
+    },
+    {
+      name: 'a modified node takes priority over an out-of-bounds range',
+      run: () => {
+        const { ast, sourceMap } = parseMdWithSourceMap('hello');
+        const node = textNodes(ast)[0];
+        node.value = 'changed';
+        return sourceMap.getSourceRange(node, 0, 99);
+      },
+      error: {
+        name: 'SourceMapConsistencyError',
+        message: 'the mapped node has been modified since parsing; the source map only covers the original parsed value',
+      },
+    },
+    {
+      name: 'an empty range inside an atomic segment stays invalid',
+      run: () => {
+        const { ast, sourceMap } = parseMdWithSourceMap('&Afr;');
+        return sourceMap.getSourceRange(textNodes(ast)[0], 1, 1);
+      },
+      error: {
+        name: 'RangeError',
+        message: 'getSourceRange: empty range falls inside an atomic construct (escape / character reference / normalization) where no accurate source boundary exists',
+      },
+    },
+    {
+      name: 'a text range crossing a source gap stays invalid',
+      run: () => {
+        const { ast, sourceMap } = parseMdWithSourceMap('> hello\n> world');
+        const node = textNodes(ast)[0];
+        return sourceMap.getSourceRange(node, 0, node.value.length);
+      },
+      error: {
+        name: 'RangeError',
+        message: 'getSourceRange: value range crosses non-contiguous source segments',
+      },
+    },
+    {
+      name: 'an empty URL resolves to its destination boundary',
+      run: () => {
+        const { ast, sourceMap } = parseMdWithSourceMap('[link]()');
+        const node = nodesOfType(ast, 'link')[0];
+        return sourceMap.getFieldSourceRange(node, 'url', 0, 0);
+      },
+      offsets: [7, 7],
+    },
+  ];
+
+  test.each(cases)('$name', ({ run, error, offsets }) => {
+    if (error) {
+      expect(run).toThrow(expect.objectContaining(error));
+      return;
+    }
+    const range = run();
+    expect([range.start.offset, range.end.offset]).toEqual(offsets);
+  });
+});
+
 describe('parseMd vs parseMdWithSourceMap: AST parity corpus', () => {
   const { parseMd } = require('./helpers');
 
