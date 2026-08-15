@@ -9,6 +9,16 @@ import type {
 } from '../types';
 
 /**
+ * An absolute half-open interval in the Markdown source.
+ *
+ * @internal
+ */
+export interface SourceSpan {
+  start: number
+  end: number
+}
+
+/**
  * The kind of transformation the parser applied to turn a slice of the raw
  * Markdown source into the corresponding slice of a node's normalized value.
  *

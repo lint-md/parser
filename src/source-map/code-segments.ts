@@ -1,14 +1,9 @@
 import type { ParsedPosition } from '../types';
-import type { MarkdownSourceMapSegment } from './types';
+import type { MarkdownSourceMapSegment, SourceSpan } from './types';
 
 interface CodeSegments {
   segments: MarkdownSourceMapSegment[]
   emptyOffset?: number
-}
-
-interface SourceSpan {
-  start: number
-  end: number
 }
 
 function lineEnd(md: string, start: number, limit: number): number {
