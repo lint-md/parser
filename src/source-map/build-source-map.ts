@@ -24,6 +24,7 @@ import type {
   MarkdownSourceMap,
   MarkdownSourceMapSegment,
   ParsedMarkdownDocument,
+  SourceSpan,
 } from './types';
 
 // Use the exact same parser extensions as `parseMd` so the AST (and therefore
@@ -290,11 +291,6 @@ function buildUrlSegments(
   }
   flushLiteral(bounds.end);
   return value === node.url ? { segments } : undefined;
-}
-
-interface SourceSpan {
-  start: number
-  end: number
 }
 
 /**

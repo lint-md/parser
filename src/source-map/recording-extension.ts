@@ -1,12 +1,7 @@
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
 import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-character-reference';
 import type { ParsedPoint } from '../types';
-import type { MarkdownSourceMapSegment } from './types';
-
-interface SourceSpan {
-  start: number
-  end: number
-}
+import type { MarkdownSourceMapSegment, SourceSpan } from './types';
 
 interface RecordingState {
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
