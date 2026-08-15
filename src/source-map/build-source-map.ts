@@ -555,6 +555,8 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const owned = new WeakSet<object>();
   const originalValues = new WeakMap<object, string>();
   const originalUrls = new WeakMap<object, string>();
+  // Snapshot offsets before consumers can mutate positions.
+  // getRaw() must describe the source that originally produced each node.
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
   const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
 
