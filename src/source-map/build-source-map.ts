@@ -550,19 +550,23 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const ast = tree as unknown as PositionedMarkdownRoot;
   const lineStarts = computeLineStarts(md);
 
-  // Inline-code nodes are compiled by the standard mdast handler rather than
-  // recordingExtension. Their positions and normalized values are nevertheless
-  // enough to build a mapping after the tree is complete.
-  (function recordInlineCodeSegments(node: any) {
+  // The index records ownership and parse-time state for all nodes.
+  // It also builds mappings that the parser extension cannot produce.
+  const owned = new WeakSet<object>();
+  const originalValues = new WeakMap<object, string>();
+  const originalUrls = new WeakMap<object, string>();
+  const originalOffsets = new WeakMap<object, readonly [number, number]>();
+  const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
+
+  function indexNode(node: any): void {
+    // The standard mdast handler compiles inline code.
+    // The completed node contains enough data to build its mapping.
     if (node.type === 'inlineCode' && typeof node.value === 'string') {
       const segments = buildInlineCodeSegments(md, node);
       if (segments)
         state.inlineCodeSegments.set(node, segments);
     }
-    for (const child of node.children || []) recordInlineCodeSegments(child);
-  })(ast);
 
-  (function recordCodeSegments(node: any) {
     if (node.type === 'code' && typeof node.value === 'string') {
       const mapping = buildCodeSegments(md, node);
       if (mapping) {
@@ -572,10 +576,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         }
       }
     }
-    for (const child of node.children || []) recordCodeSegments(child);
-  })(ast);
 
-  (function recordUrlSegments(node: any) {
     if (
       (node.type === 'link' || node.type === 'definition')
       && typeof node.url === 'string'
@@ -588,27 +589,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
           state.emptyUrlOffsets.set(node, segments.emptyOffset);
       }
     }
-    for (const child of node.children || []) recordUrlSegments(child);
-  })(ast);
 
-  // Record every node that belongs to this document so `getRaw` /
-  // `getSourceRange` can reject foreign nodes instead of silently slicing the
-  // wrong Markdown with a stolen offset. For mapped text nodes, also snapshot
-  // the parsed `value` reference: strings are immutable, so comparing against
-  // this snapshot later detects any post-parse modification that would
-  // invalidate the recorded mapping.
-  //
-  // Snapshot every node's original source offsets too: `getRaw` reports the raw
-  // Markdown that *produced* the node, which is a historical fact fixed at
-  // parse time. If a consumer later mutates `node.position` (e.g. a fixer
-  // adjusting offsets), `getRaw` must still return the original source rather
-  // than slice with the stolen offset.
-  const owned = new WeakSet<object>();
-  const originalValues = new WeakMap<object, string>();
-  const originalUrls = new WeakMap<object, string>();
-  const originalOffsets = new WeakMap<object, readonly [number, number]>();
-  const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
-  (function register(node: any) {
     owned.add(node);
     const mappedSegments = state.segments.get(node)
       || state.inlineCodeSegments.get(node)
@@ -623,8 +604,10 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     if (position && position.start && position.end) {
       originalOffsets.set(node, [position.start.offset, position.end.offset]);
     }
-    for (const child of node.children || []) register(child);
-  })(ast);
+    for (const child of node.children || []) indexNode(child);
+  }
+
+  indexNode(ast);
 
   // The recorded mapping only describes the parsed value. If a consumer
   // modified `node.value` after parsing, any answer would be fabricated —
