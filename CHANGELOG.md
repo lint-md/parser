@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- source-map validation 工作流（打包 parser 产物并安装到 lint-md/core 跑全量测试）新增 `pull_request` 触发，限定高风险路径（`src/**`、`etc/**`、`package.json`、`scripts/test-package.mjs`）；docs-only 等 PR 不再为该验证付费。保留每周 cron 与手动触发作为安全网，覆盖 core 自身依赖变动造成的破坏（#105）
+
+### Tests
+
+- 将 52 KB 的 `__tests__/source-map.spec.ts`（1273 行、150 用例）拆分为 `__tests__/source-map/` 下按功能域组织的 9 个 spec：supported-fields、text、inline-code、code、url、range-contract、ownership、errors、ast-parity。describe 标题逐字保留，测试体逐字搬运（仅调整 import 路径）；用例总数与断言不变，零运行时行为变更、零公开 API 变更。原有的 differential / invariants / edge-cases / fixer-integration 四个 spec 不受影响（#106）
+
 ## 0.2.1
 
 ### Refactored
