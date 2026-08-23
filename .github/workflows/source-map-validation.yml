@@ -2,6 +2,14 @@ name: source-map validation
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'etc/**'
+      - 'package.json'
+      - 'scripts/test-package.mjs'
+  # lint-md core moves on its own. The weekly run catches breakage caused
+  # by changes inside core, not by parser changes.
   schedule:
     - cron: '0 3 * * 1'
 
