@@ -4,7 +4,7 @@
 
 ### Changed
 
-- source-map validation 工作流（打包 parser 产物并安装到 lint-md/core 跑全量测试）新增 `pull_request` 触发，限定高风险路径（`src/**`、`etc/**`、`package.json`、`scripts/test-package.mjs`）；docs-only 等 PR 不再为该验证付费。保留每周 cron 与手动触发作为安全网，覆盖 core 自身依赖变动造成的破坏（#105）
+- source-map validation 工作流（打包 parser 产物并安装到 lint-md/core 跑全量测试）新增 `pull_request` 触发，限定高风险路径（`src/**`、`etc/**`、`package.json`、`scripts/test-package.mjs`）；docs-only 等 PR 不再运行该验证。保留每周 cron 与手动触发作为安全网，覆盖 core 自身依赖变动造成的破坏（#105）
 
 ### Tests
 
