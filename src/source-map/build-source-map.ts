@@ -540,7 +540,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   }) as unknown as Root;
 
   const ast = tree as unknown as PositionedMarkdownRoot;
-  const lineStarts = computeLineStarts(md);
+  let lineStarts: number[] | undefined;
 
   // The index records ownership and parse-time state for all nodes.
   // It also builds mappings that the parser extension cannot produce.
@@ -707,6 +707,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       }
       assertUnmodified(node as object);
       validateBounds(node.value.length);
+      lineStarts ??= computeLineStarts(md);
       return resolveSegmentRange({
         segments: segs,
         valueLength: node.value.length,
@@ -750,6 +751,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       }
       assertUrlUnmodified(node as object);
       validateBounds(node.url.length);
+      lineStarts ??= computeLineStarts(md);
       return resolveSegmentRange({
         segments: segs,
         valueLength: node.url.length,
