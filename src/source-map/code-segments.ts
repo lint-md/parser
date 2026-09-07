@@ -143,6 +143,20 @@ function trimTrailingLineEnding(md: string, spans: SourceSpan[]): void {
     spans.pop();
 }
 
+function equalRange(
+  left: string,
+  leftStart: number,
+  right: string,
+  rightStart: number,
+  length: number,
+): boolean {
+  for (let i = 0; i < length; i++) {
+    if (left.charCodeAt(leftStart + i) !== right.charCodeAt(rightStart + i))
+      return false;
+  }
+  return true;
+}
+
 function segmentsFromSpans(
   md: string,
   spans: SourceSpan[],
@@ -150,12 +164,12 @@ function segmentsFromSpans(
 ): MarkdownSourceMapSegment[] | undefined {
   const segments: MarkdownSourceMapSegment[] = [];
   let valueOffset = 0;
-  let sourceValue = '';
   for (const span of spans) {
     if (span.start >= span.end)
       continue;
     const length = span.end - span.start;
-    sourceValue += md.slice(span.start, span.end);
+    if (!equalRange(md, span.start, value, valueOffset, length))
+      return undefined;
     const previous = segments[segments.length - 1];
     if (previous && previous.sourceEnd === span.start && previous.valueEnd === valueOffset) {
       previous.sourceEnd = span.end;
@@ -172,9 +186,7 @@ function segmentsFromSpans(
     }
     valueOffset += length;
   }
-  return valueOffset === value.length && sourceValue === value
-    ? segments
-    : undefined;
+  return valueOffset === value.length ? segments : undefined;
 }
 
 function buildFencedCodeSegments(
