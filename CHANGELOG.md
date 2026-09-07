@@ -2,9 +2,18 @@
 
 ## Unreleased
 
+## 0.2.2
+
 ### Changed
 
 - source-map validation 工作流（打包 parser 产物并安装到 lint-md/core 跑全量测试）新增 `pull_request` 触发，限定高风险路径（`src/**`、`etc/**`、`package.json`、`scripts/test-package.mjs`）；docs-only 等 PR 不再运行该验证。保留每周 cron 与手动触发作为安全网，覆盖 core 自身依赖变动造成的破坏（#105）
+
+### Perf
+
+- `getSourceRange()` range query 复用已解析的 segment index，每次 range query 从 4 次二分查找降为 2 次（#108）
+- `parseMdWithSourceMap()` 延迟构建 `lineStarts`，`getRaw()`-only 调用方不再触发 Markdown 全文扫描和 `number[]` 分配（#109）
+- `getSourceRange()` 延迟构建 `sourceGapPrefix`，仅在多 segment range query 时构建并缓存（#110）
+- 消除 inline code、code segment 和 URL mapping 验证过程中的临时字符串和数组重建：`[...interior]` spread → `charCodeAt` 循环，`sourceValue` 拼接 → `equalRange` 逐字符比较，`value` 拼接 → `startsWith` 增量验证（#111）
 
 ### Tests
 
