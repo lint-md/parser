@@ -424,25 +424,6 @@ function validateValueRange(
   };
 }
 
-function sourceOffsetAt(
-  segments: MarkdownSourceMapSegment[],
-  valueLength: number,
-  valueIndex: number,
-  pastUnit: boolean,
-  incompleteMessage: string,
-): number {
-  const segment = findSegmentAt(segments, valueIndex);
-  if (!segment) {
-    if (valueIndex === valueLength && segments.length > 0)
-      return segments[segments.length - 1].sourceEnd;
-    throw new RangeError(incompleteMessage);
-  }
-  if (segment.kind !== 'literal')
-    return pastUnit ? segment.sourceEnd : segment.sourceStart;
-  const units = (pastUnit ? valueIndex + 1 : valueIndex) - segment.valueStart;
-  return segment.sourceStart + units;
-}
-
 function resolveEmptyRange(
   options: SegmentRangeOptions,
 ): number {
@@ -473,7 +454,6 @@ function resolveEmptyRange(
 function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
   const {
     segments,
-    valueLength,
     valueStart,
     valueEnd,
     sourceGapPrefix,
@@ -506,20 +486,21 @@ function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
     throw new RangeError(messages.nonContiguous);
   }
 
-  const startOffset = sourceOffsetAt(
-    segments,
-    valueLength,
-    valueStart,
-    false,
-    messages.incomplete,
-  );
-  const endOffset = sourceOffsetAt(
-    segments,
-    valueLength,
-    valueEnd - 1,
-    true,
-    messages.incomplete,
-  );
+  const startSegment = segments[startSegmentIndex];
+  const endSegment = segments[endSegmentIndex];
+
+  let startOffset: number;
+  if (startSegment.kind !== 'literal')
+    startOffset = startSegment.sourceStart;
+  else
+    startOffset = startSegment.sourceStart + valueStart - startSegment.valueStart;
+
+  let endOffset: number;
+  if (endSegment.kind !== 'literal')
+    endOffset = endSegment.sourceEnd;
+  else
+    endOffset = endSegment.sourceStart + (valueEnd - 1) + 1 - endSegment.valueStart;
+
   return {
     start: pointAtOffset(lineStarts, source, startOffset),
     end: pointAtOffset(lineStarts, source, endOffset),
