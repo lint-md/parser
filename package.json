@@ -49,6 +49,8 @@
     "test:package": "publint && node scripts/test-package.mjs",
     "prebench:source-map": "pnpm run build",
     "bench:source-map": "node scripts/bench-source-map.mjs",
+    "preprofile:source-map": "pnpm run build",
+    "profile:source-map": "node --expose-gc scripts/profile-source-map-heap.mjs",
     "test:update": "jest --updateSnapshot",
     "prepublishOnly": "pnpm run lint && pnpm run build && pnpm run test"
   },
