@@ -66,6 +66,15 @@ export interface MarkdownSourceMapSegment {
 }
 
 /**
+ * Stores one segment without an array allocation.
+ *
+ * @internal
+ */
+export type SegmentMapping =
+  | MarkdownSourceMapSegment
+  | MarkdownSourceMapSegment[];
+
+/**
  * Sidecar source map produced alongside a parse. Maps supported value nodes to
  * compressed segments that reconstruct supported normalized fields from the
  * raw Markdown source.

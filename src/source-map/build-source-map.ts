@@ -20,10 +20,12 @@ import {
   SourceMapUnavailableError,
 } from './errors';
 import { recordingExtension } from './recording-extension';
+import { compactSegments, segmentAt, segmentCount } from './segment-mapping';
 import type {
   MarkdownSourceMap,
   MarkdownSourceMapSegment,
   ParsedMarkdownDocument,
+  SegmentMapping,
   SourceSpan,
 } from './types';
 
@@ -35,15 +37,15 @@ const { micromarkExtensions, fromMarkdownExtensions } = getParserExtensions();
 
 interface RecordingState {
   /** node -> ordered, gap-free, non-overlapping segments. */
-  segments: WeakMap<object, MarkdownSourceMapSegment[]>
+  segments: WeakMap<object, SegmentMapping>
   /** inlineCode node -> value segments (see buildInlineCodeSegments). */
-  inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  inlineCodeSegments: WeakMap<object, SegmentMapping>
   /** code node -> value segments (see buildCodeSegments). */
-  codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  codeSegments: WeakMap<object, SegmentMapping>
   /** code node -> source point for an empty value. */
   emptyCodeOffsets: WeakMap<object, number>
   /** link / definition node -> normalized URL segments. */
-  urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  urlSegments: WeakMap<object, SegmentMapping>
   /** link / definition node -> source point for an empty URL. */
   emptyUrlOffsets: WeakMap<object, number>
   /** link / definition node -> parser-confirmed destination content span. */
@@ -326,38 +328,40 @@ function buildUrlSegments(
  * repeatedly.
  */
 function findSegmentIndexAt(
-  segs: MarkdownSourceMapSegment[],
+  segs: SegmentMapping,
   valueIndex: number,
 ): number | undefined {
   let lo = 0;
-  let hi = segs.length - 1;
+  let hi = segmentCount(segs) - 1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
-    if (segs[mid].valueStart <= valueIndex)
+    if (segmentAt(segs, mid)!.valueStart <= valueIndex)
       lo = mid;
     else hi = mid - 1;
   }
-  const seg = segs[lo];
+  const seg = segmentAt(segs, lo);
   return seg && valueIndex >= seg.valueStart && valueIndex < seg.valueEnd
     ? lo
     : undefined;
 }
 
 function findSegmentAt(
-  segs: MarkdownSourceMapSegment[],
+  segs: SegmentMapping,
   valueIndex: number,
 ): MarkdownSourceMapSegment | undefined {
   const index = findSegmentIndexAt(segs, valueIndex);
-  return index === undefined ? undefined : segs[index];
+  return index === undefined ? undefined : segmentAt(segs, index);
 }
 
 /** Prefix count of source gaps before each segment. */
-function buildSourceGapPrefix(segs: MarkdownSourceMapSegment[]): number[] {
+function buildSourceGapPrefix(segs: SegmentMapping): number[] {
   const prefix = [0];
-  for (let index = 0; index + 1 < segs.length; index++) {
+  for (let index = 0; index + 1 < segmentCount(segs); index++) {
+    const current = segmentAt(segs, index)!;
+    const next = segmentAt(segs, index + 1)!;
     prefix.push(
       prefix[index]
-      + Number(segs[index].sourceEnd !== segs[index + 1].sourceStart),
+      + Number(current.sourceEnd !== next.sourceStart),
     );
   }
   return prefix;
@@ -372,7 +376,7 @@ interface RangeResolutionMessages {
 }
 
 interface SegmentRangeOptions {
-  segments: MarkdownSourceMapSegment[]
+  segments: SegmentMapping
   valueLength: number
   valueStart: number
   valueEnd: number
@@ -441,15 +445,16 @@ function resolveEmptyRange(
     emptyOffset,
     messages,
   } = options;
-  if (segments.length === 0) {
+  const count = segmentCount(segments);
+  if (count === 0) {
     if (valueLength === 0 && valueStart === 0 && emptyOffset !== undefined)
       return emptyOffset;
     throw new RangeError(messages.incomplete);
   }
   if (valueStart === 0)
-    return segments[0].sourceStart;
+    return segmentAt(segments, 0)!.sourceStart;
   if (valueStart === valueLength)
-    return segments[segments.length - 1].sourceEnd;
+    return segmentAt(segments, count - 1)!.sourceEnd;
   const segment = findSegmentAt(segments, valueStart);
   if (segment && valueStart === segment.valueStart)
     return segment.sourceStart;
@@ -476,7 +481,7 @@ function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
 
   if (valueStart === valueEnd)
     return pointRange(resolveEmptyRange(options));
-  if (segments.length === 0)
+  if (segmentCount(segments) === 0)
     throw new RangeError(messages.incomplete);
 
   const startSegmentIndex = findSegmentIndexAt(segments, valueStart);
@@ -489,8 +494,8 @@ function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
       throw new RangeError(messages.nonContiguous);
   }
 
-  const startSegment = segments[startSegmentIndex];
-  const endSegment = segments[endSegmentIndex];
+  const startSegment = segmentAt(segments, startSegmentIndex)!;
+  const endSegment = segmentAt(segments, endSegmentIndex)!;
 
   let startOffset: number;
   if (startSegment.kind !== 'literal')
@@ -553,7 +558,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   // Snapshot offsets before consumers can mutate positions.
   // getRaw() must describe the source that originally produced each node.
   const originalOffsets = new WeakMap<object, readonly [number, number]>();
-  const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
+  const sourceGapPrefixes = new WeakMap<SegmentMapping, number[]>();
 
   function indexNode(node: TraversableNode): void {
     // The standard mdast handler compiles inline code.
@@ -564,7 +569,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     ) {
       const segments = buildInlineCodeSegments(md, node);
       if (segments)
-        state.inlineCodeSegments.set(node, segments);
+        state.inlineCodeSegments.set(node, compactSegments(segments));
     }
 
     if (
@@ -573,7 +578,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     ) {
       const mapping = buildCodeSegments(md, node);
       if (mapping) {
-        state.codeSegments.set(node, mapping.segments);
+        state.codeSegments.set(node, compactSegments(mapping.segments));
         if (mapping.emptyOffset !== undefined) {
           state.emptyCodeOffsets.set(node, mapping.emptyOffset);
         }
@@ -587,7 +592,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       const bounds = state.urlSourceSpans.get(node);
       const segments = bounds ? buildUrlSegments(md, node, bounds) : undefined;
       if (segments) {
-        state.urlSegments.set(node, segments.segments);
+        state.urlSegments.set(node, compactSegments(segments.segments));
         if (segments.emptyOffset !== undefined)
           state.emptyUrlOffsets.set(node, segments.emptyOffset);
       }
@@ -651,13 +656,14 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         );
       }
       const segs = state.segments.get(node as object);
-      if (segs && segs.length > 0) {
+      if (segs && segmentCount(segs) > 0) {
         assertUnmodified(node as object);
         // Text nodes with a source map: use the full recorded outer-token
         // span, which covers the complete raw source that produced the value
         // (e.g. '&#0;' includes the trailing ';' even though the parser
         // positions the text node one code unit earlier).
-        return md.slice(segs[0].sourceStart, segs[segs.length - 1].sourceEnd);
+        const last = segmentCount(segs) - 1;
+        return md.slice(segmentAt(segs, 0)!.sourceStart, segmentAt(segs, last)!.sourceEnd);
       }
       if (
         state.inlineCodeSegments.has(node as object)

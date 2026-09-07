@@ -1,10 +1,11 @@
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
 import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-character-reference';
 import type { ParsedPoint } from '../types';
-import type { MarkdownSourceMapSegment, SourceSpan } from './types';
+import { appendSegment } from './segment-mapping';
+import type { MarkdownSourceMapSegment, SegmentMapping, SourceSpan } from './types';
 
 interface RecordingState {
-  segments: WeakMap<object, MarkdownSourceMapSegment[]>
+  segments: WeakMap<object, SegmentMapping>
   urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
@@ -86,9 +87,6 @@ export function recordingExtension(state: RecordingState) {
       node.children.push(tail);
     }
     this.stack.push(tail);
-    if (!state.segments.has(tail)) {
-      state.segments.set(tail, []);
-    }
   };
 
   // For escapes and character references the decoded value is appended by the
@@ -116,14 +114,11 @@ export function recordingExtension(state: RecordingState) {
     const valueStart = tail.value.length;
     tail.value += slice;
     tail.position.end = point(token.end);
-    const segs = state.segments.get(tail);
-    if (segs) {
-      segs.push({
-        valueStart,
-        valueEnd: valueStart + slice.length,
-        ...metadata,
-      });
-    }
+    appendSegment(state.segments, tail, {
+      valueStart,
+      valueEnd: valueStart + slice.length,
+      ...metadata,
+    });
   };
 
   const onexitcharacterreferencevalue = function (this: CompileContext, token: any) {
@@ -151,15 +146,12 @@ export function recordingExtension(state: RecordingState) {
     const valueStart = tail.value.length;
     tail.value += value;
     tail.position.end = point(token.end);
-    const segs = state.segments.get(tail);
-    if (segs) {
-      segs.push({
-        valueStart,
-        valueEnd: valueStart + value.length,
-        ...construct,
-        kind,
-      });
-    }
+    appendSegment(state.segments, tail, {
+      valueStart,
+      valueEnd: valueStart + value.length,
+      ...construct,
+      kind,
+    });
   };
 
   const onexitlineending = function (this: CompileContext, token: any) {

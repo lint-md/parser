@@ -1,7 +1,7 @@
 // Heap-profile source-map retained structures.
 //
-// Run:  pnpm run profile:source-map -- <fixture> <phase>
-// e.g. pnpm run profile:source-map -- segments build
+// Run:  pnpm run profile:source-map <fixture> <phase>
+// e.g. pnpm run profile:source-map segments build
 //
 // Fixtures:
 //   many-nodes   – 10k small text nodes (flat list)
@@ -88,7 +88,12 @@ function collectMappedNodes(root) {
 
 // ── Main ────────────────────────────────────────────────────────────────
 
-const [, , fixtureName, phase] = process.argv;
+const args = process.argv.slice(2);
+
+// Accept the npm-style separator because pnpm passes it to the script.
+if (args[0] === '--') args.shift();
+
+const [fixtureName, phase] = args;
 
 if (!fixtureName || !phase || !FIXTURES[fixtureName] || !['build', 'raw', 'range'].includes(phase)) {
   console.error(
