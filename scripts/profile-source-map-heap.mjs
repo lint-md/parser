@@ -6,7 +6,7 @@
 // Fixtures:
 //   many-nodes   – 10k small text nodes (flat list)
 //   segments     – 256 KiB high segment-density (&amp;\( repeats)
-//   fenced-code  – 1 MiB fenced code block
+//   fenced-code  – 1 MiB fenced code block (single code node with segments)
 //   urls         – 1000 link definitions
 //
 // Phases:
@@ -42,12 +42,12 @@ function fixtureSegments() {
 }
 
 function fixtureFencedCode() {
-  // 1 MiB code inside a fenced block — one big code node, no segments.
+  // 1 MiB code inside a fenced block — one large code node with
+  // code-value source mapping.
   const line = 'x'.repeat(80);
-  const lines = [];
   const target = 1024 * 1024;
-  while (lines.join('\n').length < target) lines.push(line);
-  return '```\n' + lines.join('\n') + '\n```';
+  const count = Math.ceil(target / (line.length + 1));
+  return '```\n' + `${line}\n`.repeat(count) + '```';
 }
 
 function fixtureUrls() {
@@ -119,7 +119,7 @@ const { ast, sourceMap } = parseMdWithSourceMap(md);
 if (phase === 'raw') {
   const nodes = collectMappedNodes(ast);
   for (const n of nodes) {
-    try { sourceMap.getRaw(n); } catch { /* some nodes lack segments */ }
+    sourceMap.getRaw(n);
   }
 } else if (phase === 'range') {
   const nodes = collectMappedNodes(ast).filter(
@@ -127,7 +127,13 @@ if (phase === 'raw') {
   );
   for (const n of nodes) {
     if (!n.value) continue;
-    try { sourceMap.getSourceRange(n, 0, n.value.length); } catch { /* skip */ }
+    try {
+      sourceMap.getSourceRange(n, 0, n.value.length);
+    } catch (error) {
+      // Only non-contiguous ranges (e.g. across blockquote boundaries)
+      // are expected to fail. Anything else is a real bug.
+      if (!(error instanceof RangeError)) throw error;
+    }
   }
 }
 
