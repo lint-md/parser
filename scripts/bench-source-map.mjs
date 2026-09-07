@@ -114,11 +114,11 @@ for (const kib of SIZES_KIB) {
     [
       'query full value range',
       () => {
-        for (let r = 0; r < 1000; r++) sourceMap.getSourceRange(node, 0, len);
+        for (let r = 0; r < 10_000; r++) sourceMap.getSourceRange(node, 0, len);
       },
     ],
     [
-      'random queries',
+      'random single-unit queries',
       () => {
         let seed = 12345;
         const rand = () => {
@@ -128,6 +128,21 @@ for (const kib of SIZES_KIB) {
         for (let r = 0; r < len; r++) {
           const i = Math.floor(rand() * len);
           sourceMap.getSourceRange(node, i, i + 1);
+        }
+      },
+    ],
+    [
+      'random range queries',
+      () => {
+        let seed = 12345;
+        const rand = () => {
+          seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
+          return seed / 0x7FFFFFFF;
+        };
+        for (let r = 0; r < 10_000; r++) {
+          const a = Math.floor(rand() * len);
+          const b = Math.floor(rand() * (len - a)) + a + 1;
+          sourceMap.getSourceRange(node, a, Math.min(b, len));
         }
       },
     ],
@@ -144,7 +159,7 @@ for (const kib of SIZES_KIB) {
   const selectedPatterns = SMOKE ? [patterns[0]] : patterns;
 
   for (const [label, fn] of selectedPatterns) {
-    const r = time(label, fn);
+    const r = timeMedian(label, fn);
     console.log(`  ${r.label.padEnd(28)} ${fmt(r.ms)}`);
 
     if (SMOKE && r.ms > SMOKE_QUERY_BUDGET_MS) {
