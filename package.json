@@ -10,6 +10,7 @@
   "homepage": "https://github.com/lint-md",
   "license": "MIT",
   "type": "commonjs",
+  "sideEffects": false,
   "packageManager": "pnpm@11.0.9",
   "engines": {
     "node": ">=20"
