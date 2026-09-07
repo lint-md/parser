@@ -370,7 +370,7 @@ interface SegmentRangeOptions {
   valueStart: number
   valueEnd: number
   emptyOffset?: number
-  sourceGapPrefix?: number[]
+  getSourceGapPrefix?: () => number[]
   requireContiguousSource?: boolean
   messages: RangeResolutionMessages
   lineStarts: number[]
@@ -456,7 +456,7 @@ function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
     segments,
     valueStart,
     valueEnd,
-    sourceGapPrefix,
+    getSourceGapPrefix,
     requireContiguousSource,
     messages,
     lineStarts,
@@ -476,14 +476,10 @@ function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
   const endSegmentIndex = findSegmentIndexAt(segments, valueEnd - 1);
   if (startSegmentIndex === undefined || endSegmentIndex === undefined)
     throw new RangeError(messages.incomplete);
-  if (
-    requireContiguousSource
-    && (
-      !sourceGapPrefix
-      || sourceGapPrefix[endSegmentIndex] !== sourceGapPrefix[startSegmentIndex]
-    )
-  ) {
-    throw new RangeError(messages.nonContiguous);
+  if (requireContiguousSource && startSegmentIndex !== endSegmentIndex) {
+    const prefix = getSourceGapPrefix?.();
+    if (!prefix || prefix[endSegmentIndex] !== prefix[startSegmentIndex])
+      throw new RangeError(messages.nonContiguous);
   }
 
   const startSegment = segments[startSegmentIndex];
@@ -597,7 +593,6 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     if (mappedSegments) {
       if (hasStringField(node, 'value'))
         originalValues.set(node, node.value);
-      sourceGapPrefixes.set(mappedSegments, buildSourceGapPrefix(mappedSegments));
     }
     if (
       state.urlSegments.has(node)
@@ -714,7 +709,14 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         valueStart,
         valueEnd,
         emptyOffset: state.emptyCodeOffsets.get(node as object),
-        sourceGapPrefix: sourceGapPrefixes.get(segs),
+        getSourceGapPrefix: () => {
+          let prefix = sourceGapPrefixes.get(segs);
+          if (!prefix) {
+            prefix = buildSourceGapPrefix(segs);
+            sourceGapPrefixes.set(segs, prefix);
+          }
+          return prefix;
+        },
         requireContiguousSource: true,
         messages: sourceRangeMessages,
         lineStarts,
