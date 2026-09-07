@@ -99,7 +99,7 @@ pnpm run profile:source-map -- segments range
 |---|---|---|
 | `many-nodes` | 10k short paragraphs | high node count, low segment density |
 | `segments` | 256 KiB `&amp;\(` repeats | maximum segment count per node |
-| `fenced-code` | 1 MiB code block | single code node, no segments |
+| `fenced-code` | 1 MiB code block | single large code node with source-map segments |
 | `urls` | 1000 link definitions | URL segment construction |
 
 **Phases:**
@@ -108,7 +108,7 @@ pnpm run profile:source-map -- segments range
 |---|---|---|
 | `build` | `parseMdWithSourceMap()` only | `lineStarts`, `sourceGapPrefix` |
 | `raw` | + `getRaw()` on every mapped node | `lineStarts`, `sourceGapPrefix` |
-| `range` | + `getSourceRange()` on every text node | (indexes now created on demand) |
+| `range` | + `getSourceRange()` on every mapped value node | (indexes now created on demand) |
 
 ### What to look for in DevTools
 
@@ -122,7 +122,8 @@ pnpm run profile:source-map -- segments range
 - Lazy indexes (`lineStarts` array, `sourceGapPrefix` arrays)
 
 The build → raw → range progression should show `lineStarts` and
-`sourceGapPrefix` appearing only in the `range` phase. If they appear
+`sourceGapPrefix` (for multi-segment ranges) appearing only in the
+`range` phase. If they appear
 in `build` or `raw`, the lazy design is broken.
 
 ### Interpretation

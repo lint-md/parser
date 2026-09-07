@@ -16,7 +16,7 @@
 //
 // Outputs a .heapsnapshot to temp/heap-profile/.
 // Requires Node >= 19 with --expose-gc.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import v8 from 'node:v8';
@@ -67,16 +67,6 @@ const FIXTURES = {
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────
-
-/** Collect all leaf nodes of a given type from the AST. */
-function collectNodes(root, type) {
-  const out = [];
-  (function walk(n) {
-    if (n.type === type) out.push(n);
-    for (const c of n.children || []) walk(c);
-  })(root);
-  return out;
-}
 
 /** Collect all mapped text/inlineCode/code/link/definition nodes. */
 function collectMappedNodes(root) {
