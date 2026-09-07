@@ -75,3 +75,72 @@ downstream source-map integration together.
 
 The workflow uses a read-only token and disables persisted checkout
 credentials because it executes downstream repository code.
+
+## Source-map heap profiling
+
+The `profile:source-map` script captures V8 heap snapshots at specific
+construction phases to verify that lazy indexes (`lineStarts`,
+`sourceGapPrefix`) do not exist in retained heap until first use.
+
+### Usage
+
+```bash
+# Capture a snapshot
+pnpm run profile:source-map -- segments build
+pnpm run profile:source-map -- segments raw
+pnpm run profile:source-map -- segments range
+
+# Open in Chrome DevTools → Memory → Load .heapsnapshot
+```
+
+**Fixtures:**
+
+| Fixture | Shape | Purpose |
+|---|---|---|
+| `many-nodes` | 10k short paragraphs | high node count, low segment density |
+| `segments` | 256 KiB `&amp;\(` repeats | maximum segment count per node |
+| `fenced-code` | 1 MiB code block | single code node, no segments |
+| `urls` | 1000 link definitions | URL segment construction |
+
+**Phases:**
+
+| Phase | What runs | What should NOT exist in heap |
+|---|---|---|
+| `build` | `parseMdWithSourceMap()` only | `lineStarts`, `sourceGapPrefix` |
+| `raw` | + `getRaw()` on every mapped node | `lineStarts`, `sourceGapPrefix` |
+| `range` | + `getSourceRange()` on every text node | (indexes now created on demand) |
+
+### What to look for in DevTools
+
+**Retained size dominators** — in the Dominators view, check:
+
+- AST nodes (`type`, `position`, `children`, `value`)
+- Source strings (the original Markdown input)
+- Segment objects (`valueStart`, `valueEnd`, `sourceStart`, `sourceEnd`, `kind`)
+- Segment arrays (one per mapped node)
+- WeakMap state (sourceMap closure → WeakMap → values)
+- Lazy indexes (`lineStarts` array, `sourceGapPrefix` arrays)
+
+The build → raw → range progression should show `lineStarts` and
+`sourceGapPrefix` appearing only in the `range` phase. If they appear
+in `build` or `raw`, the lazy design is broken.
+
+### Interpretation
+
+The goal is a retained-heap breakdown:
+
+```
+retained heap
+├── AST                 ??%
+├── source strings      ??%
+├── segment objects     ??%
+├── segment arrays      ??%
+├── WeakMap state       ??%
+└── lazy indexes        ??%
+```
+
+If AST + source strings + parser strings dominate, source-map memory
+optimization is not worthwhile. If segment objects/arrays are large,
+consider a more compact segment representation.
+
+**Rule: no heap dominator / retained-size evidence → no memory optimization PRs.**
