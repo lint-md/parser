@@ -192,7 +192,13 @@ function buildInlineCodeSegments(
   let valueSourceEnd = interior.length;
   const leadingEnd = leadingWhitespaceEnd();
   const trailingStart = trailingWhitespaceStart();
-  const hasData = [...interior].some(char => !isWhitespace(char.charCodeAt(0)));
+  let hasData = false;
+  for (let i = 0; i < interior.length; i++) {
+    if (!isWhitespace(interior.charCodeAt(i))) {
+      hasData = true;
+      break;
+    }
+  }
   if (leadingEnd > 0 && trailingStart < interior.length && hasData) {
     valueSourceStart = leadingEnd;
     valueSourceEnd = trailingStart;
@@ -249,8 +255,8 @@ function buildUrlSegments(
       : undefined;
   }
   const segments: MarkdownSourceMapSegment[] = [];
-  let value = '';
   let valueOffset = 0;
+  let valueMatch = true;
   const add = (sourceStart: number, sourceEnd: number, output: string, kind: MarkdownSourceMapSegment['kind']) => {
     segments.push({
       valueStart: valueOffset,
@@ -259,7 +265,8 @@ function buildUrlSegments(
       sourceEnd,
       kind,
     });
-    value += output;
+    if (valueMatch && !node.url.startsWith(output, valueOffset))
+      valueMatch = false;
     valueOffset += output.length;
   };
   let literalStart = bounds.start;
@@ -305,7 +312,7 @@ function buildUrlSegments(
     offset++;
   }
   flushLiteral(bounds.end);
-  return value === node.url ? { segments } : undefined;
+  return valueMatch && valueOffset === node.url.length ? { segments } : undefined;
 }
 
 /**
