@@ -408,11 +408,11 @@ const fieldRangeMessages: RangeResolutionMessages = {
   nonContiguous: 'getFieldSourceRange: range crosses non-contiguous source segments',
 };
 
-function validateValueRange(
+function validateValueIndices(
   valueStart: number,
   valueEnd: number,
   messages: RangeResolutionMessages,
-): (valueLength: number) => void {
+): void {
   if (
     !Number.isInteger(valueStart)
     || !Number.isInteger(valueEnd)
@@ -421,14 +421,19 @@ function validateValueRange(
   ) {
     throw new RangeError(messages.invalidIndices(valueStart, valueEnd));
   }
-  // The caller first confirms that the field has a mapping.
-  return (valueLength: number) => {
-    if (valueStart < 0 || valueEnd > valueLength || valueStart > valueEnd) {
-      throw new RangeError(
-        messages.outOfBounds(valueStart, valueEnd, valueLength),
-      );
-    }
-  };
+}
+
+function validateValueBounds(
+  valueStart: number,
+  valueEnd: number,
+  valueLength: number,
+  messages: RangeResolutionMessages,
+): void {
+  if (valueStart < 0 || valueEnd > valueLength || valueStart > valueEnd) {
+    throw new RangeError(
+      messages.outOfBounds(valueStart, valueEnd, valueLength),
+    );
+  }
 }
 
 function resolveEmptyRange(
@@ -692,14 +697,18 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
             + 'parseMdWithSourceMap() call',
         );
       }
-      const validateBounds = validateValueRange(
+      validateValueIndices(
         valueStart,
         valueEnd,
         sourceRangeMessages,
       );
-      const segs = state.segments.get(node as object)
-        || state.inlineCodeSegments.get(node as object)
-        || state.codeSegments.get(node as object);
+      let segs: MarkdownSourceMapSegment[] | undefined;
+      if (node.type === 'text')
+        segs = state.segments.get(node);
+      else if (node.type === 'inlineCode')
+        segs = state.inlineCodeSegments.get(node);
+      else if (node.type === 'code')
+        segs = state.codeSegments.get(node);
       if (!segs) {
         throw new SourceMapUnavailableError(
           'getSourceRange: no source mapping is available for the given '
@@ -708,14 +717,21 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         );
       }
       assertUnmodified(node as object);
-      validateBounds(node.value.length);
+      validateValueBounds(
+        valueStart,
+        valueEnd,
+        node.value.length,
+        sourceRangeMessages,
+      );
       lineStarts ??= computeLineStarts(md);
       return resolveSegmentRange({
         segments: segs,
         valueLength: node.value.length,
         valueStart,
         valueEnd,
-        emptyOffset: state.emptyCodeOffsets.get(node as object),
+        emptyOffset: node.type === 'code'
+          ? state.emptyCodeOffsets.get(node)
+          : undefined,
         getSourceGapPrefix: () => {
           let prefix = sourceGapPrefixes.get(segs);
           if (!prefix) {
@@ -747,7 +763,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
           `getFieldSourceRange: no source mapping is available for field ${field}`,
         );
       }
-      const validateBounds = validateValueRange(
+      validateValueIndices(
         valueStart,
         valueEnd,
         fieldRangeMessages,
@@ -759,7 +775,12 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         );
       }
       assertUrlUnmodified(node as object);
-      validateBounds(node.url.length);
+      validateValueBounds(
+        valueStart,
+        valueEnd,
+        node.url.length,
+        fieldRangeMessages,
+      );
       lineStarts ??= computeLineStarts(md);
       return resolveSegmentRange({
         segments: segs,
