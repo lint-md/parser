@@ -59,7 +59,7 @@ function makeUrlInput(kib) {
 }
 
 /** Build the fallback shape produced by a tab-based list continuation. */
-function makeIndentedCodeInput(kib) {
+function makeIndentedCodeFallbackFixture(kib) {
   const prefixLength = kib * 1024;
   const md = `${' \t'.repeat(Math.ceil(prefixLength / 2)).slice(0, prefixLength)}x`;
   return {
@@ -232,7 +232,7 @@ if (SMOKE) {
 console.log('\n=== Indented code fallback construction ===');
 const indentedCodeResults = [];
 for (const kib of INDENTED_CODE_SIZES_KIB) {
-  const { md, node } = makeIndentedCodeInput(kib);
+  const { md, node } = makeIndentedCodeFallbackFixture(kib);
   const result = timeMedian(`${kib} KiB whitespace prefix`, () => {
     const mapping = buildCodeSegments(md, node);
     if (!mapping)

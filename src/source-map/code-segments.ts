@@ -380,6 +380,7 @@ function buildIndentedCodeSegmentsFromValueLines(
     if (contentStart === undefined)
       return undefined;
     const contentEnd = lineContentEnd(md, contentStart, endOfLine);
+    // The parsed value line must be a literal suffix of the physical source line.
     const valueLength = valueContentEnd - valueOffset;
     const sourceStart = contentEnd - valueLength;
     if (sourceStart < contentStart)
