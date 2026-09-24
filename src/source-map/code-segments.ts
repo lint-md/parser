@@ -373,7 +373,6 @@ function buildIndentedCodeSegmentsFromValueLines(
       valueOffset,
       valueLineEnd,
     );
-    const valueLine = node.value.slice(valueOffset, valueContentEnd);
     const endOfLine = lineEnd(md, offset, end);
     const contentStart = quoteDepth === 0
       ? offset
@@ -381,17 +380,17 @@ function buildIndentedCodeSegmentsFromValueLines(
     if (contentStart === undefined)
       return undefined;
     const contentEnd = lineContentEnd(md, contentStart, endOfLine);
-    let sourceStart = contentStart;
-    while (
-      sourceStart <= contentEnd
-      && md.slice(sourceStart, contentEnd) !== valueLine
-    ) {
-      const char = md.charCodeAt(sourceStart);
+    // The parsed value line must be a literal suffix of the physical source line.
+    const valueLength = valueContentEnd - valueOffset;
+    const sourceStart = contentEnd - valueLength;
+    if (sourceStart < contentStart)
+      return undefined;
+    for (let prefixOffset = contentStart; prefixOffset < sourceStart; prefixOffset++) {
+      const char = md.charCodeAt(prefixOffset);
       if (char !== 32 && char !== 9)
         return undefined;
-      sourceStart++;
     }
-    if (sourceStart > contentEnd)
+    if (!equalRange(md, sourceStart, node.value, valueOffset, valueLength))
       return undefined;
     spans.push({ start: sourceStart, end: endOfLine });
     offset = endOfLine;

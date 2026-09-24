@@ -12,9 +12,23 @@
 // Smoke (CI): node scripts/bench-source-map.mjs --smoke
 import { performance } from 'node:perf_hooks';
 import { createRequire } from 'node:module';
+import { build } from 'esbuild';
 
 const require = createRequire(import.meta.url);
 const { parseMdWithSourceMap } = require('../dist/lint-md-parser.cjs');
+
+// Build the internal entry in memory. This keeps benchmark-only exports out of
+// the package bundle.
+const [{ text: codeSegmentsModule }] = (await build({
+  entryPoints: ['src/source-map/code-segments.ts'],
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  write: false,
+})).outputFiles;
+const { buildCodeSegments } = await import(
+  `data:text/javascript;base64,${Buffer.from(codeSegmentsModule).toString('base64')}`
+);
 
 const UNIT = '&amp;\\('; // one character reference + one escape => 2 segments
 const SMOKE = process.argv.includes('--smoke');
@@ -27,6 +41,10 @@ const URL_BUILD_SIZES_KIB = [16, 32, 64, 128, 256, 512];
 // search grows beyond 6× from 128 KiB to 512 KiB; this larger interval makes
 // the quadratic term dominate while leaving headroom for CI scheduling noise.
 const SMOKE_URL_BUILD_RATIO_MAX = 6;
+const INDENTED_CODE_SIZES_KIB = [1, 16, 64, 256];
+// A 4x prefix grows close to 4x after the suffix lookup becomes linear. The
+// old repeated-slice search grows close to 16x.
+const SMOKE_INDENTED_CODE_RATIO_MAX = 10;
 
 /** Build an input of roughly `kib` kibibytes made of repeated UNIT. */
 function makeInput(kib) {
@@ -38,6 +56,22 @@ function makeInput(kib) {
 /** Build a link destination with no valid character references. */
 function makeUrlInput(kib) {
   return '[x](' + '&'.repeat(kib * 1024) + ')';
+}
+
+/** Build the fallback shape produced by a tab-based list continuation. */
+function makeIndentedCodeFallbackFixture(kib) {
+  const prefixLength = kib * 1024;
+  const md = `${' \t'.repeat(Math.ceil(prefixLength / 2)).slice(0, prefixLength)}x`;
+  return {
+    md,
+    node: {
+      value: 'x',
+      position: {
+        start: { line: 1, column: prefixLength + 1, offset: prefixLength },
+        end: { line: 1, column: prefixLength + 2, offset: md.length },
+      },
+    },
+  };
 }
 
 /** The first (and only) text node of the parsed document. */
@@ -191,6 +225,32 @@ if (SMOKE) {
     throw new Error(
       `benchmark smoke failed: URL construction grew ${ratio.toFixed(2)}x `
       + `from 128 KiB to 512 KiB (budget ${SMOKE_URL_BUILD_RATIO_MAX}x)`,
+    );
+  }
+}
+
+console.log('\n=== Indented code fallback construction ===');
+const indentedCodeResults = [];
+for (const kib of INDENTED_CODE_SIZES_KIB) {
+  const { md, node } = makeIndentedCodeFallbackFixture(kib);
+  const result = timeMedian(`${kib} KiB whitespace prefix`, () => {
+    const mapping = buildCodeSegments(md, node);
+    if (!mapping)
+      throw new Error('indented code benchmark did not produce a mapping');
+  });
+  indentedCodeResults.push(result);
+  console.log(`  ${result.label.padEnd(28)} ${fmt(result.ms)}`);
+}
+
+if (SMOKE) {
+  const smaller = indentedCodeResults[2]; // 64 KiB
+  const larger = indentedCodeResults[3]; // 256 KiB
+  const ratio = larger.ms / smaller.ms;
+  console.log(`  ${'64 → 256 KiB growth'.padEnd(28)} ${ratio.toFixed(2)}x`);
+  if (ratio > SMOKE_INDENTED_CODE_RATIO_MAX) {
+    throw new Error(
+      `benchmark smoke failed: indented code construction grew ${ratio.toFixed(2)}x `
+      + `from 64 KiB to 256 KiB (budget ${SMOKE_INDENTED_CODE_RATIO_MAX}x)`,
     );
   }
 }
