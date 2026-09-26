@@ -33,7 +33,7 @@ jobs:
       - name: Setup PNPM
         uses: pnpm/action-setup@v6.0.8
         with:
-          version: 11.0.9
+          version: 11.27.1
 
       - name: Install modules and build parser
         run: pnpm install --frozen-lockfile && pnpm run build

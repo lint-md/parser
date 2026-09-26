@@ -11,7 +11,7 @@
   "license": "MIT",
   "type": "commonjs",
   "sideEffects": false,
-  "packageManager": "pnpm@11.0.9",
+  "packageManager": "pnpm@11.27.1",
   "engines": {
     "node": ">=20"
   },
