@@ -2,9 +2,21 @@
 
 ## Unreleased
 
+## 0.3.0
+
 ### Added
 
 - 新增 `MarkdownSourceMap.getValueSourceIndex()`。其 `sourceOffsetAt()` 方法将 value 边界映射为原始 Markdown offset。顺序查询使用游标，反向查询使用二分查找（#121）。
+
+### Changed
+
+- 在包元数据中声明 `sideEffects: false`，便于下游打包器删除未使用代码（#114）。
+
+### Perf
+
+- 避免 indented code 源码映射的平方级 suffix 搜索（#118）。
+- 简化 `getSourceRange()` 的热路径，减少重复查询和临时分配（#120）。
+- `getValueSourceIndex()` 为顺序查询保留游标，为反向查询使用二分查找（#122）。
 
 ## 0.2.2
 
