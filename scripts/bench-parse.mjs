@@ -20,6 +20,11 @@
 // recordingExtension(state) call, parse-time snapshots, and the sourceMap
 // object and its closures.
 //
+// `multiline-hmd` is a realistic soft-break workload.
+// `soft-break-L` shapes are the synthetic density axis: one paragraph with
+// `L` characters per line. A smaller `L` means more line endings per byte.
+// Use them to separate line-ending count from byte count.
+//
 // Each measured sample runs in its own child process. The parent aggregates
 // only. A single process builds a large multiline AST with heavy GC churn, so
 // an in-process median flips between runs. The child isolates one phase and
@@ -69,6 +74,19 @@ const SHAPES = [
   'large-code-block',
 ];
 
+// Soft-break-density shapes separate line-ending count from byte count.
+// `soft-break-L` builds one paragraph from `L` characters plus one line
+// ending, so a smaller `L` means more line endings for the same bytes.
+// These shapes stay out of the default set: they are slow at large sizes
+// while micromark-util-subtokenize@1 shows O(n^2) behavior (issue #127).
+const SOFT_BREAK_SHAPES = [
+  'soft-break-1',
+  'soft-break-4',
+  'soft-break-16',
+  'soft-break-64',
+];
+const ALL_SHAPES = [...SHAPES, ...SOFT_BREAK_SHAPES];
+
 const DEFAULT_SIZES = [256 * 1024];
 const SMOKE_SIZES = [16 * 1024, 64 * 1024];
 const SMOKE_SHAPES = ['multiline-hmd', 'mixed-markdown'];
@@ -116,6 +134,10 @@ function generateInput(shape, bytes) {
       return `\`\`\`text\n${body}\n\`\`\``;
     },
   };
+  const softBreak = /^soft-break-(\d+)$/.exec(shape);
+  if (softBreak) {
+    return repeatToSize(`${'a'.repeat(Number(softBreak[1]))}\n`, bytes);
+  }
   const generator = generators[shape];
   if (!generator)
     throw new Error(`Unknown shape: ${shape}`);
@@ -252,8 +274,13 @@ function printHelp() {
 Options:
   --sizes <list>    Comma-separated input sizes in bytes (default: ${DEFAULT_SIZES.join(',')})
   --bytes <n>       Shorthand for one size
-  --shapes <list>   Comma-separated shapes (default: all)
+  --shapes <list>   Comma-separated shapes (default: all except soft-break)
                     Shapes: ${SHAPES.join(' | ')}
+                    Soft-break density: ${SOFT_BREAK_SHAPES.join(' | ')}
+                    A soft-break-L shape is one paragraph with L characters per
+                    line. A smaller L means more line endings per byte.
+                    These shapes are not in the default set and are slow at
+                    large sizes (see issue #127).
   --runs <n>        Measured samples per phase (default: 3)
   --warmup <n>      Warmup parses per sample (default: 1)
   --smoke           Fast CI check: small sizes, growth ratio, AST parity
@@ -318,7 +345,7 @@ function parseArgs() {
   if (options.sizes.some((size) => !Number.isSafeInteger(size) || size < 1))
     throw new Error('Sizes must be positive integers.');
   for (const shape of options.shapes) {
-    if (!SHAPES.includes(shape))
+    if (!ALL_SHAPES.includes(shape))
       throw new Error(`Unknown shape: ${shape}`);
   }
   return options;
