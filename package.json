@@ -49,6 +49,7 @@
     "test:package": "publint && node scripts/test-package.mjs",
     "prebench:source-map": "pnpm run build",
     "bench:source-map": "node scripts/bench-source-map.mjs",
+    "bench:parse": "node scripts/bench-parse.mjs",
     "preprofile:source-map": "pnpm run build",
     "profile:source-map": "node --expose-gc scripts/profile-source-map-heap.mjs",
     "test:update": "jest --updateSnapshot",
