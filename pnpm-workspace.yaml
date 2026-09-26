@@ -1,3 +1,5 @@
 # esbuild installs its platform-specific binary through a lifecycle script.
 allowBuilds:
   esbuild: true
+patchedDependencies:
+  micromark-util-subtokenize@1.1.0: patches/micromark-util-subtokenize@1.1.0.patch
