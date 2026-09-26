@@ -6,14 +6,19 @@
 //   A  = parseMd(md)                        (remark / unified wrapper)
 //   B  = fromMarkdown + parser extensions   (bare compile, no recording)
 //   B2 = B + recordingExtension             (source-map recording)
-//   C  = parseMdWithSourceMap(md)           (recording + indexNode post-pass)
+//   C  = parseMdWithSourceMap(md)           (recording + post-parse setup)
 //
 // Derived values:
 //
 //   A-B   remark / unified wrapper difference
 //   B2-B  recordingExtension overhead
-//   C-B2  post-parse indexNode overhead
+//   C-B2  post-parse source-map setup / indexing overhead
 //   C-B   total source-map increment
+//
+// `indexNode` is likely most of C-B2, but this harness does not time it alone.
+// C-B2 also covers RecordingState / WeakMap creation, the
+// recordingExtension(state) call, parse-time snapshots, and the sourceMap
+// object and its closures.
 //
 // Each measured sample runs in its own child process. The parent aggregates
 // only. A single process builds a large multiline AST with heavy GC churn, so
@@ -67,11 +72,10 @@ const SHAPES = [
 const DEFAULT_SIZES = [256 * 1024];
 const SMOKE_SIZES = [16 * 1024, 64 * 1024];
 const SMOKE_SHAPES = ['multiline-hmd', 'mixed-markdown'];
-// Smoke checks growth, not absolute wall time. CI machines move too much. The
-// input grows 4x; a ratio above this budget flags super-linear behavior.
+// Smoke checks growth, not absolute wall time. CI machines move too much.
+// The input grows 4x. The relaxed 10x budget catches severe growth
+// regressions while tolerating the parser's current scaling and CI noise.
 const SMOKE_GROWTH_RATIO_MAX = 10;
-
-const UNIT_BYTES = 1024;
 
 // ---------------------------------------------------------------------------
 // Child mode and parity mode
@@ -329,10 +333,12 @@ function median(values) {
 }
 
 // Bundle the internal entry once. Children import the temp file, so esbuild
-// runs one time for the whole benchmark.
+// runs one time for the whole benchmark. `cleanupDir` is set only for a
+// directory this script created, so a caller-supplied BENCH_PARSE_BUNDLE is
+// never removed.
 async function buildBundle() {
   if (process.env.BENCH_PARSE_BUNDLE)
-    return process.env.BENCH_PARSE_BUNDLE;
+    return { bundlePath: process.env.BENCH_PARSE_BUNDLE, cleanupDir: null };
   const { outputFiles } = await build({
     stdin: { contents: INTERNAL_ENTRY, resolveDir: REPO_ROOT, loader: 'ts' },
     bundle: true,
@@ -344,7 +350,7 @@ async function buildBundle() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-md-parser-bench-'));
   const bundlePath = path.join(dir, 'entry.mjs');
   fs.writeFileSync(bundlePath, outputFiles[0].text);
-  return bundlePath;
+  return { bundlePath, cleanupDir: dir };
 }
 
 function runSample({ bundlePath, shape, bytes, phase, warmup }) {
@@ -396,6 +402,7 @@ function printTable(rows, runs) {
     'C-B'.padStart(8),
   ].join(' ');
   console.log(`# parse-phase benchmark (median of ${runs}, child-process isolated, ${process.version})`);
+  console.log('# derived: A-B unified wrapper | B2-B recording | C-B2 post-parse setup / indexing | C-B total source-map');
   console.log(header);
   console.log('-'.repeat(header.length));
   for (const row of rows) {
@@ -416,8 +423,7 @@ function printTable(rows, runs) {
 
 async function main() {
   const options = parseArgs();
-  const bundlePath = await buildBundle();
-  const cleanup = bundlePath.startsWith(os.tmpdir());
+  const { bundlePath, cleanupDir } = await buildBundle();
   try {
     const samples = [];
     for (const shape of options.shapes) {
@@ -470,8 +476,8 @@ async function main() {
       runSmokeChecks(samples, options, rows, bundlePath);
   }
   finally {
-    if (cleanup)
-      fs.rmSync(path.dirname(bundlePath), { recursive: true, force: true });
+    if (cleanupDir)
+      fs.rmSync(cleanupDir, { recursive: true, force: true });
   }
 }
 
