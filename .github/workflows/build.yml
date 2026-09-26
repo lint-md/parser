@@ -40,6 +40,12 @@ jobs:
         if: matrix.node-version == '22'
         run: node scripts/bench-source-map.mjs --smoke
 
+      # Splits base Markdown parsing, source-map recording, and post-parse
+      # indexing. The smoke checks AST parity and 4x input growth only.
+      - name: Run parse-phase benchmark smoke
+        if: matrix.node-version == '22'
+        run: node scripts/bench-parse.mjs --smoke
+
   Lint:
     runs-on: ubuntu-latest
     strategy:
