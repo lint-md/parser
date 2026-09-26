@@ -77,8 +77,9 @@ const SHAPES = [
 // Soft-break-density shapes separate line-ending count from byte count.
 // `soft-break-L` builds one paragraph from `L` characters plus one line
 // ending, so a smaller `L` means more line endings for the same bytes.
-// These shapes stay out of the default set: they are slow at large sizes
+// These shapes stay out of the default run: they are slow at large sizes
 // while micromark-util-subtokenize@1 shows O(n^2) behavior (issue #127).
+// `soft-break-1` is the primary smoke growth check.
 const SOFT_BREAK_SHAPES = [
   'soft-break-1',
   'soft-break-4',
@@ -88,12 +89,20 @@ const SOFT_BREAK_SHAPES = [
 const ALL_SHAPES = [...SHAPES, ...SOFT_BREAK_SHAPES];
 
 const DEFAULT_SIZES = [256 * 1024];
-const SMOKE_SIZES = [16 * 1024, 64 * 1024];
-const SMOKE_SHAPES = ['multiline-hmd', 'mixed-markdown'];
+
 // Smoke checks growth, not absolute wall time. CI machines move too much.
-// The input grows 4x. The relaxed 10x budget catches severe growth
-// regressions while tolerating the parser's current scaling and CI noise.
-const SMOKE_GROWTH_RATIO_MAX = 10;
+// Each check grows the input 4x. The budget tolerates the parser's current
+// near-linear scaling and CI noise while still catching a severe regression.
+// A tight budget is meaningful only after the subtokenize backport (#127).
+const SMOKE_GROWTH_RATIO_MAX = 6;
+// `soft-break-1` is the primary regression check: it maximizes line-ending
+// count per byte, so it exposes the O(n^2) soft-break cost. `multiline-hmd`
+// and `mixed-markdown` stay as realistic confirmation at smaller sizes.
+const SMOKE_GROWTH_CHECKS = [
+  { shape: 'multiline-hmd', sizes: [16 * 1024, 64 * 1024] },
+  { shape: 'mixed-markdown', sizes: [16 * 1024, 64 * 1024] },
+  { shape: 'soft-break-1', sizes: [64 * 1024, 256 * 1024] },
+];
 
 // ---------------------------------------------------------------------------
 // Child mode and parity mode
@@ -283,7 +292,7 @@ Options:
                     large sizes (see issue #127).
   --runs <n>        Measured samples per phase (default: 3)
   --warmup <n>      Warmup parses per sample (default: 1)
-  --smoke           Fast CI check: small sizes, growth ratio, AST parity
+  --smoke           Fast CI check: growth ratio, AST parity, soft-break density
   --json            Print one JSON sample per line instead of the table
   -h, --help        Show this help
 
@@ -335,8 +344,8 @@ function parseArgs() {
     }
   }
   if (options.smoke) {
-    options.sizes ??= SMOKE_SIZES;
-    options.shapes ??= SMOKE_SHAPES;
+    options.sizes ??= [...new Set(SMOKE_GROWTH_CHECKS.flatMap((check) => check.sizes))];
+    options.shapes ??= [...new Set(SMOKE_GROWTH_CHECKS.map((check) => check.shape))];
     options.runs = 1;
     options.warmup = 1;
   }
@@ -448,17 +457,42 @@ function printTable(rows, runs) {
   }
 }
 
+// Sample pairs to measure. Smoke uses only the pairs named by the growth
+// checks, so a dense shape can use larger sizes without pushing the other
+// shapes up too.
+function samplePairs(options) {
+  if (options.smoke) {
+    const pairs = [];
+    const seen = new Set();
+    for (const check of SMOKE_GROWTH_CHECKS) {
+      for (const bytes of check.sizes) {
+        const key = `${check.shape}|${bytes}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          pairs.push({ shape: check.shape, bytes });
+        }
+      }
+    }
+    return pairs;
+  }
+  const pairs = [];
+  for (const shape of options.shapes) {
+    for (const bytes of options.sizes)
+      pairs.push({ shape, bytes });
+  }
+  return pairs;
+}
+
 async function main() {
   const options = parseArgs();
   const { bundlePath, cleanupDir } = await buildBundle();
   try {
+    const pairs = samplePairs(options);
     const samples = [];
-    for (const shape of options.shapes) {
-      for (const bytes of options.sizes) {
-        for (const phase of PHASES) {
-          for (let run = 0; run < options.runs; run += 1) {
-            samples.push(runSample({ bundlePath, shape, bytes, phase, warmup: options.warmup }));
-          }
+    for (const { shape, bytes } of pairs) {
+      for (const phase of PHASES) {
+        for (let run = 0; run < options.runs; run += 1) {
+          samples.push(runSample({ bundlePath, shape, bytes, phase, warmup: options.warmup }));
         }
       }
     }
@@ -467,29 +501,27 @@ async function main() {
       for (const sample of samples)
         process.stdout.write(`${JSON.stringify(sample)}\n`);
       if (options.smoke)
-        runSmokeChecks(samples, options, undefined, bundlePath);
+        runSmokeChecks(samples, undefined, bundlePath);
       return;
     }
 
     const rows = [];
-    for (const shape of options.shapes) {
-      for (const bytes of options.sizes) {
-        const phases = {};
-        let checksumsEqual = true;
-        let baseline = null;
-        for (const phase of PHASES) {
-          const phaseSamples = samples.filter(
-            (sample) => sample.shape === shape && sample.bytes === bytes && sample.phase === phase,
-          );
-          phases[phase] = median(phaseSamples.map((sample) => sample.wallTimeMs));
-          const checksum = JSON.stringify(phaseSamples[0].checksum);
-          if (baseline === null)
-            baseline = checksum;
-          else if (baseline !== checksum)
-            checksumsEqual = false;
-        }
-        rows.push({ shape, bytes, phases, checksumsEqual });
+    for (const { shape, bytes } of pairs) {
+      const phases = {};
+      let checksumsEqual = true;
+      let baseline = null;
+      for (const phase of PHASES) {
+        const phaseSamples = samples.filter(
+          (sample) => sample.shape === shape && sample.bytes === bytes && sample.phase === phase,
+        );
+        phases[phase] = median(phaseSamples.map((sample) => sample.wallTimeMs));
+        const checksum = JSON.stringify(phaseSamples[0].checksum);
+        if (baseline === null)
+          baseline = checksum;
+        else if (baseline !== checksum)
+          checksumsEqual = false;
       }
+      rows.push({ shape, bytes, phases, checksumsEqual });
     }
 
     printTable(rows, options.runs);
@@ -500,7 +532,7 @@ async function main() {
     }
 
     if (options.smoke)
-      runSmokeChecks(samples, options, rows, bundlePath);
+      runSmokeChecks(samples, rows, bundlePath);
   }
   finally {
     if (cleanupDir)
@@ -508,7 +540,7 @@ async function main() {
   }
 }
 
-function runSmokeChecks(samples, options, rows, bundlePath) {
+function runSmokeChecks(samples, rows, bundlePath) {
   for (const sample of samples) {
     if (!Number.isFinite(sample.wallTimeMs) || sample.wallTimeMs < 0)
       throw new Error(`Non-finite wall time for ${sample.shape} ${sample.phase}`);
@@ -526,25 +558,21 @@ function runSmokeChecks(samples, options, rows, bundlePath) {
     }
   }
 
-  const sizes = [...options.sizes].sort((left, right) => left - right);
-  if (sizes.length < 2)
-    return;
-  const smallest = sizes[0];
-  const largest = sizes[sizes.length - 1];
-  const growth = largest / smallest;
-  for (const shape of options.shapes) {
+  for (const check of SMOKE_GROWTH_CHECKS) {
+    const [smallest, largest] = check.sizes;
+    const growth = largest / smallest;
     for (const phase of ['B', 'C']) {
       const small = median(samples
-        .filter((sample) => sample.shape === shape && sample.bytes === smallest && sample.phase === phase)
+        .filter((sample) => sample.shape === check.shape && sample.bytes === smallest && sample.phase === phase)
         .map((sample) => sample.wallTimeMs));
       const large = median(samples
-        .filter((sample) => sample.shape === shape && sample.bytes === largest && sample.phase === phase)
+        .filter((sample) => sample.shape === check.shape && sample.bytes === largest && sample.phase === phase)
         .map((sample) => sample.wallTimeMs));
       const ratio = large / small;
-      console.log(`Smoke: ${shape} ${phase} growth ${smallest} → ${largest} bytes = ${ratio.toFixed(2)}x (input ${growth}x)`);
+      console.log(`Smoke: ${check.shape} ${phase} growth ${smallest} → ${largest} bytes = ${ratio.toFixed(2)}x (input ${growth}x)`);
       if (ratio > SMOKE_GROWTH_RATIO_MAX) {
         throw new Error(
-          `Smoke failed: ${shape} ${phase} grew ${ratio.toFixed(2)}x on a ${growth}x input `
+          `Smoke failed: ${check.shape} ${phase} grew ${ratio.toFixed(2)}x on a ${growth}x input `
           + `(budget ${SMOKE_GROWTH_RATIO_MAX}x).`,
         );
       }

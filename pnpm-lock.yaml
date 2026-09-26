@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  micromark-util-subtokenize@1.1.0: e36683b0bd046409af298fe642843b3ea3bf9aca6f5f06eacb7a0f528700556d
+
 importers:
 
   .:
@@ -5977,7 +5980,7 @@ snapshots:
       micromark-util-html-tag-name: 1.2.0
       micromark-util-normalize-identifier: 1.1.0
       micromark-util-resolve-all: 1.1.0
-      micromark-util-subtokenize: 1.1.0
+      micromark-util-subtokenize: 1.1.0(patch_hash=e36683b0bd046409af298fe642843b3ea3bf9aca6f5f06eacb7a0f528700556d)
       micromark-util-symbol: 1.1.0
       micromark-util-types: 1.1.0
       uvu: 0.5.6
@@ -6148,7 +6151,7 @@ snapshots:
       micromark-util-encode: 1.1.0
       micromark-util-symbol: 1.1.0
 
-  micromark-util-subtokenize@1.1.0:
+  micromark-util-subtokenize@1.1.0(patch_hash=e36683b0bd046409af298fe642843b3ea3bf9aca6f5f06eacb7a0f528700556d):
     dependencies:
       micromark-util-chunked: 1.1.0
       micromark-util-symbol: 1.1.0
@@ -6181,7 +6184,7 @@ snapshots:
       micromark-util-normalize-identifier: 1.1.0
       micromark-util-resolve-all: 1.1.0
       micromark-util-sanitize-uri: 1.2.0
-      micromark-util-subtokenize: 1.1.0
+      micromark-util-subtokenize: 1.1.0(patch_hash=e36683b0bd046409af298fe642843b3ea3bf9aca6f5f06eacb7a0f528700556d)
       micromark-util-symbol: 1.1.0
       micromark-util-types: 1.1.0
       uvu: 0.5.6
