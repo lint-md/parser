@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.3.1
+
+### Changed
+
+- 将本地和 CI 使用的 pnpm 版本升级到 11.27.1（#129）。
+
+### Perf
+
+- 回移 `micromark-util-subtokenize` v2 的 splice buffer，避免密集软换行解析的平方级增长（#131）。
+
+### Tests
+
+- 新增解析阶段 benchmark 和软换行密度场景（#126、#128）。
+- 将密集软换行的增长上限收紧到 6 倍（#131）。
+
 ## 0.3.0
 
 ### Added
