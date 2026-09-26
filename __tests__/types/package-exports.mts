@@ -9,6 +9,8 @@ import {
   type SourceMapErrorCode,
   type ParsedMarkdownDocument,
   type MarkdownLinkNode,
+  type MarkdownTextNode,
+  type MarkdownValueSourceIndex,
   type PositionedMarkdownRoot,
   type PositionedMarkdownNode,
 } from '@lint-md/parser';
@@ -25,6 +27,10 @@ const markdown: string = revertMdAstNode(root);
 const same: boolean = stringifyMdAst === revertMdAstNode;
 
 const doc: ParsedMarkdownDocument = parseMdWithSourceMap('# ESM');
+const sourceIndex: MarkdownValueSourceIndex = doc.sourceMap.getValueSourceIndex(
+  doc.ast.children[0] as MarkdownTextNode,
+);
+const sourceOffset: number = sourceIndex.sourceOffsetAt(0);
 const urlRange = doc.sourceMap.getFieldSourceRange(
   doc.ast.children[0] as MarkdownLinkNode,
   'url',
@@ -50,6 +56,8 @@ void nodeOffset;
 void markdown;
 void same;
 void doc;
+void sourceIndex;
+void sourceOffset;
 void urlRange;
 void consistency;
 void unavailable;

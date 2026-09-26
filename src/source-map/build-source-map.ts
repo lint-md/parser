@@ -23,6 +23,7 @@ import { recordingExtension } from './recording-extension';
 import type {
   MarkdownSourceMap,
   MarkdownSourceMapSegment,
+  MarkdownValueSourceIndex,
   ParsedMarkdownDocument,
   SourceSpan,
 } from './types';
@@ -644,6 +645,16 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     }
   };
 
+  const getValueSegments = (
+    node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
+  ): MarkdownSourceMapSegment[] | undefined => {
+    if (node.type === 'text')
+      return state.segments.get(node);
+    if (node.type === 'inlineCode')
+      return state.inlineCodeSegments.get(node);
+    return state.codeSegments.get(node);
+  };
+
   const sourceMap: MarkdownSourceMap = {
     getRaw(
       node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode
@@ -685,6 +696,102 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
       return md.slice(offsets[0], offsets[1]);
     },
 
+    getValueSourceIndex(
+      node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
+    ): MarkdownValueSourceIndex {
+      if (!owned.has(node as object)) {
+        throw new SourceMapUnavailableError(
+          'getValueSourceIndex: the given node does not belong to this '
+            + 'document; pass a node from the tree returned by the same '
+            + 'parseMdWithSourceMap() call',
+        );
+      }
+      const segs = getValueSegments(node);
+      if (!segs) {
+        throw new SourceMapUnavailableError(
+          'getValueSourceIndex: no source mapping is available for the given '
+            + 'node; it was generated, added after parsing, or is not a '
+            + 'supported text, inlineCode, or code node',
+        );
+      }
+      assertUnmodified(node as object);
+
+      const valueLength = node.value.length;
+      const emptyOffset = node.type === 'code'
+        ? state.emptyCodeOffsets.get(node)
+        : undefined;
+      let segmentIndex = 0;
+
+      return {
+        sourceOffsetAt(valueIndex: number): number {
+          assertUnmodified(node as object);
+          if (!Number.isInteger(valueIndex) || !Number.isFinite(valueIndex)) {
+            throw new RangeError(
+              'sourceOffsetAt: valueIndex must be a finite integer, '
+                + `got ${valueIndex}`,
+            );
+          }
+          if (valueIndex < 0 || valueIndex > valueLength) {
+            throw new RangeError(
+              `sourceOffsetAt: valueIndex ${valueIndex} is out of bounds for `
+                + `a mapped node of length ${valueLength}`,
+            );
+          }
+          if (segs.length === 0) {
+            if (valueLength === 0 && valueIndex === 0 && emptyOffset !== undefined)
+              return emptyOffset;
+            throw new RangeError(
+              'sourceOffsetAt: value boundary is not covered by the source map',
+            );
+          }
+          if (valueIndex === 0)
+            return segs[0].sourceStart;
+          if (valueIndex === valueLength)
+            return segs[segs.length - 1].sourceEnd;
+
+          let segment = segs[segmentIndex];
+          if (
+            !segment
+            || valueIndex < segment.valueStart
+            || valueIndex >= segment.valueEnd
+          ) {
+            if (segment && valueIndex >= segment.valueEnd) {
+              while (
+                segmentIndex + 1 < segs.length
+                && valueIndex >= segs[segmentIndex].valueEnd
+              ) {
+                segmentIndex++;
+              }
+              segment = segs[segmentIndex];
+            }
+            if (
+              !segment
+              || valueIndex < segment.valueStart
+              || valueIndex >= segment.valueEnd
+            ) {
+              const index = findSegmentIndexAt(segs, valueIndex);
+              if (index === undefined) {
+                throw new RangeError(
+                  'sourceOffsetAt: value boundary is not covered by the source map',
+                );
+              }
+              segmentIndex = index;
+              segment = segs[index];
+            }
+          }
+
+          if (valueIndex === segment.valueStart)
+            return segment.sourceStart;
+          if (segment.kind === 'literal')
+            return segment.sourceStart + valueIndex - segment.valueStart;
+          throw new RangeError(
+            'sourceOffsetAt: value boundary falls inside an atomic construct '
+              + '(escape / character reference / normalization)',
+          );
+        },
+      };
+    },
+
     getSourceRange(
       node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
       valueStart: number,
@@ -702,13 +809,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         valueEnd,
         sourceRangeMessages,
       );
-      let segs: MarkdownSourceMapSegment[] | undefined;
-      if (node.type === 'text')
-        segs = state.segments.get(node);
-      else if (node.type === 'inlineCode')
-        segs = state.inlineCodeSegments.get(node);
-      else if (node.type === 'code')
-        segs = state.codeSegments.get(node);
+      const segs = getValueSegments(node);
       if (!segs) {
         throw new SourceMapUnavailableError(
           'getSourceRange: no source mapping is available for the given '

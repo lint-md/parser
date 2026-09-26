@@ -74,6 +74,20 @@ export interface MarkdownSourceMapSegment {
  */
 export interface MarkdownSourceMap {
   /**
+   * Creates an index for repeated source-offset queries on a normalized value.
+   *
+   * The index supports `text`, `inlineCode`, and block `code` nodes. It keeps a
+   * cursor for forward scans and uses binary search for other access patterns.
+   * Each query returns an absolute UTF-16 offset into the original Markdown.
+   *
+   * @param node - A supported value node from this parsed document.
+   * @returns An index for the node's normalized `value`.
+   */
+  getValueSourceIndex(
+    node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode,
+  ): MarkdownValueSourceIndex
+
+  /**
    * Returns the raw Markdown substring that produced the given node's
    * normalized value.
    *
@@ -151,6 +165,25 @@ export interface MarkdownSourceMap {
     valueStart: number,
     valueEnd: number,
   ): ParsedPosition
+}
+
+/**
+ * Maps normalized value boundaries to offsets in the original Markdown.
+ *
+ * @public
+ */
+export interface MarkdownValueSourceIndex {
+  /**
+   * Returns the source offset for a boundary in the normalized value.
+   *
+   * The index uses JavaScript string indices. A boundary inside an atomic
+   * escape, character reference, or normalization has no exact source offset.
+   * The method throws `RangeError` for such a boundary.
+   *
+   * @param valueIndex - A boundary in the normalized value.
+   * @returns The absolute UTF-16 offset in the original Markdown.
+   */
+  sourceOffsetAt(valueIndex: number): number
 }
 
 /**

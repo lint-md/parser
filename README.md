@@ -68,6 +68,10 @@ const textNode = ast.children[0].children[0]; // text value "A&B"
 const range = sourceMap.getSourceRange(textNode, 1, 2);
 // range.start.offset === 1, range.end.offset === 6
 
+// 为顺序扫描建立轻量索引。结果是原始 Markdown 的绝对 offset。
+const sourceIndex = sourceMap.getValueSourceIndex(textNode);
+sourceIndex.sourceOffsetAt(1); // 1
+
 // 取回该 text 节点对应的原始 Markdown 子串
 sourceMap.getRaw(textNode); // 'A&amp;B'
 ```
@@ -87,6 +91,7 @@ sourceMap.getRaw(textNode); // 'A&amp;B'
 ### 契约
 
 - `getSourceRange(node, valueStart, valueEnd)` 的索引与 JavaScript 字符串下标一致，范围均为半开区间 `[start, end)`；当前支持 `text.value`、`inlineCode.value` 与 block `code.value`。`getFieldSourceRange(node, 'url', valueStart, valueEnd)` 当前支持 inline resource link 与 definition 的 destination；autolink 和 GFM autolink literal 暂不包含。
+- `getValueSourceIndex(node).sourceOffsetAt(valueIndex)` 返回原始 Markdown 的绝对 offset。该接口为顺序边界查询保留游标。反向和随机查询使用二分查找。
 - 映射覆盖受支持节点的整个 `value`，segment 之间无空洞、无重叠。
 - 当 value 对应的原始源码连续时，`getSourceRange(node, 0, node.value.length)` 覆盖该节点 value 的完整原始来源范围。当 blockquote marker、list indentation 等容器语法将来源分隔开时，单个连续的 `ParsedPosition` 无法准确表达该范围，`getSourceRange()` 会抛出 `RangeError`。
 - 错误分为三条路径，专属错误均继承 `RangeError`（现有 `catch (RangeError)` 不受影响），并带稳定的 `code` 字段；当跨边界传递时（如跨 CJS/ESM 实例、重复安装、worker 边界），只要错误被显式序列化且 `code` 字段被保留，即可用 `code` 而非 `instanceof` 判断（类本身无法保证任意序列化机制一定保留自定义属性）：
