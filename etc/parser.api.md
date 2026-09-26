@@ -88,6 +88,7 @@ export interface MarkdownSourceMap {
     getFieldSourceRange(node: MarkdownLinkNode | MarkdownDefinitionNode, field: 'url', valueStart: number, valueEnd: number): ParsedPosition;
     getRaw(node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode | MarkdownLinkNode | MarkdownDefinitionNode): string;
     getSourceRange(node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode, valueStart: number, valueEnd: number): ParsedPosition;
+    getValueSourceIndex(node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode): MarkdownValueSourceIndex;
 }
 
 // @public (undocumented)
@@ -100,6 +101,11 @@ export interface MarkdownTextDirective extends Parent, MarkdownDirectiveFields {
 
 // @public (undocumented)
 export type MarkdownTextNode = Text_2;
+
+// @public
+export interface MarkdownValueSourceIndex {
+    sourceOffsetAt(valueIndex: number): number;
+}
 
 // @public
 export interface ParsedMarkdownDocument {

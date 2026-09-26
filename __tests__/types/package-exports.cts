@@ -23,6 +23,10 @@ const codeRange = doc.sourceMap.getSourceRange(
   0,
   1,
 );
+const sourceIndex: parser.MarkdownValueSourceIndex = doc.sourceMap.getValueSourceIndex(
+  doc.ast.children[0] as parser.MarkdownTextNode,
+);
+const sourceOffset: number = sourceIndex.sourceOffsetAt(0);
 const urlRange = doc.sourceMap.getFieldSourceRange(
   doc.ast.children[0] as parser.MarkdownLinkNode,
   'url',
@@ -38,6 +42,8 @@ void inlineCodeRaw;
 void range;
 void inlineCodeRange;
 void codeRange;
+void sourceIndex;
+void sourceOffset;
 void urlRange;
 void codeRaw;
 void consistency;

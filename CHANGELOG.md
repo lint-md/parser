@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- 新增 `MarkdownSourceMap.getValueSourceIndex()`。其 `sourceOffsetAt()` 方法将 value 边界映射为原始 Markdown offset。顺序查询使用游标，反向查询使用二分查找（#121）。
+
 ## 0.2.2
 
 ### Changed

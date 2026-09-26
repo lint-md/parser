@@ -10,5 +10,6 @@ export {
 export * from './types';
 export type {
   MarkdownSourceMap,
+  MarkdownValueSourceIndex,
   ParsedMarkdownDocument,
 } from './source-map/types';
