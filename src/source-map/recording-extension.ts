@@ -23,9 +23,12 @@ interface PendingConstruct {
   sourceEnd: number
 }
 
-interface FencedCodeRecording {
+interface CodeValueRecording {
   segments: MarkdownSourceMapSegment[]
   valueLength: number
+}
+
+interface FencedCodeRecording extends CodeValueRecording {
   emptyOffset: number
   sawOpeningLineEnding: boolean
   sawContentAfterOpening: boolean
@@ -143,7 +146,7 @@ interface CompileContext {
  * this relies on are:
  *
  * - token event handler names (enter/exit): `data`, `codeText`, `codeTextData`,
- *   `codeFenced`, `codeFencedFence`, `codeFencedFenceSequence`,
+ *   `codeFenced`, `codeFencedFence`, `codeFencedFenceSequence`, `codeIndented`,
  *   `codeFlowValue`, `blockQuotePrefix`, `characterEscape` /
  *   `characterEscapeValue`, `characterReference` / `characterReferenceValue`,
  *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`,
@@ -165,6 +168,7 @@ export function recordingExtension(state: RecordingState) {
   let pendingConstruct: PendingConstruct | undefined;
   let inlineCodeSegments: MarkdownSourceMapSegment[] | undefined;
   let fencedCodeRecording: FencedCodeRecording | undefined;
+  let indentedCodeRecording: CodeValueRecording | undefined;
   let pendingEmptyFencedCode: object | undefined;
   let lineIndentStart = 0;
 
@@ -290,8 +294,11 @@ export function recordingExtension(state: RecordingState) {
     });
   };
 
-  const recordFencedCodeSegment = function (this: CompileContext, token: any) {
-    const recording = fencedCodeRecording;
+  const recordCodeSegment = function (
+    this: CompileContext,
+    recording: CodeValueRecording | undefined,
+    token: any,
+  ) {
     if (!recording)
       return;
     const valueLength = this.sliceSerialize(token).length;
@@ -355,8 +362,9 @@ export function recordingExtension(state: RecordingState) {
         else {
           fencedCodeRecording.sawContentAfterOpening = true;
         }
-        recordFencedCodeSegment.call(this, token);
+        recordCodeSegment.call(this, fencedCodeRecording, token);
       }
+      recordCodeSegment.call(this, indentedCodeRecording, token);
     }
   };
 
@@ -469,7 +477,8 @@ export function recordingExtension(state: RecordingState) {
     });
     if (fencedCodeRecording)
       fencedCodeRecording.sawContentAfterOpening = true;
-    recordFencedCodeSegment.call(this, token);
+    recordCodeSegment.call(this, fencedCodeRecording, token);
+    recordCodeSegment.call(this, indentedCodeRecording, token);
   };
 
   const onexitcodefenced = function (this: CompileContext, token: any) {
@@ -503,6 +512,41 @@ export function recordingExtension(state: RecordingState) {
       pendingEmptyFencedCode = node;
     }
     this.setData('flowCodeInside');
+    this.exit(token);
+  };
+
+  const onentercodeindented = function (this: CompileContext, token: any) {
+    if (indentedCodeRecording) {
+      throw new Error('An indented code source map is already being recorded');
+    }
+    this.enter({ type: 'code', lang: null, meta: null, value: '' }, token);
+    this.buffer();
+    indentedCodeRecording = {
+      segments: [],
+      valueLength: 0,
+    };
+  };
+
+  const onexitcodeindented = function (this: CompileContext, token: any) {
+    const data = this.resume();
+    const node = this.stack[this.stack.length - 1];
+    if (!node || node.type !== 'code') {
+      throw new Error('Expected code node while recording indented code');
+    }
+    const value = data.replace(/(\r?\n|\r)$/g, '');
+    node.value = value;
+    const recording = indentedCodeRecording;
+    indentedCodeRecording = undefined;
+    if (!recording) {
+      throw new Error('Missing indented code source-map recording');
+    }
+    const segments = sliceLiteralSegments(
+      recording.segments,
+      0,
+      value.length,
+    );
+    if (segments)
+      state.codeSegments.set(node, segments);
     this.exit(token);
   };
 
@@ -579,6 +623,7 @@ export function recordingExtension(state: RecordingState) {
     enter: {
       codeFenced: onentercodefenced,
       codeFencedFence: onentercodefencedfence,
+      codeIndented: onentercodeindented,
       codeFlowValue: onenterdata,
       codeText: onentercodetext,
       codeTextData: onentercodetextdata,
@@ -594,6 +639,7 @@ export function recordingExtension(state: RecordingState) {
       codeFenced: onexitcodefenced,
       codeFencedFence: onexitcodefencedfence,
       codeFencedFenceSequence: onexitcodefencedfencesequence,
+      codeIndented: onexitcodeindented,
       codeFlowValue: onexitcodeflowvalue,
       codeText: onexitcodetext,
       codeTextData: onexitcodetextdata,

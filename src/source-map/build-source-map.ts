@@ -14,7 +14,6 @@ import type {
   PositionedMarkdownRoot,
 } from '../types';
 import { getParserExtensions } from '../remark-config';
-import { buildCodeSegments } from './code-segments';
 import {
   SourceMapConsistencyError,
   SourceMapUnavailableError,
@@ -42,7 +41,7 @@ interface RecordingState {
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** inlineCode node -> parser-recorded value segments. */
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
-  /** code node -> parser-recorded or indented-code value segments. */
+  /** code node -> parser-recorded value segments. */
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** code node -> source point for an empty value. */
   emptyCodeOffsets: WeakMap<object, number>
@@ -471,20 +470,6 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
 
   function indexNode(node: TraversableNode): void {
-    if (
-      node.type === 'code'
-      && hasStringField(node, 'value')
-      && !state.codeSegments.has(node)
-    ) {
-      const mapping = buildCodeSegments(md, node);
-      if (mapping) {
-        state.codeSegments.set(node, mapping.segments);
-        if (mapping.emptyOffset !== undefined) {
-          state.emptyCodeOffsets.set(node, mapping.emptyOffset);
-        }
-      }
-    }
-
     if (
       (node.type === 'link' || node.type === 'definition')
       && hasStringField(node, 'url')
