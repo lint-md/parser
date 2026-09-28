@@ -1,5 +1,4 @@
-// Benchmark source-map query performance (issue #51) and URL-field mapping
-// construction (issue #74).
+// Benchmark source-map query performance and URL destination source mapping.
 //
 // The pathological shape is a single text node made of many alternating,
 // non-mergeable atomic segments (`&amp;` character reference + `\(` escape),
@@ -23,9 +22,8 @@ const SMOKE = process.argv.includes('--smoke');
 const SIZES_KIB = SMOKE ? [256] : [1, 16, 64, 256];
 const SMOKE_QUERY_BUDGET_MS = 1000;
 const URL_BUILD_SIZES_KIB = [16, 32, 64, 128, 256, 512];
-// A 4× URL grows close to 4× on the bounded scan. The old unbounded `&`
-// search grows beyond 6× from 128 KiB to 512 KiB; this larger interval makes
-// the quadratic term dominate while leaving headroom for CI scheduling noise.
+// A 4× URL should stay close to 4× on the production parse path.
+// The larger interval leaves room for CI scheduling noise.
 const SMOKE_URL_BUILD_RATIO_MAX = 6;
 
 /** Build an input of roughly `kib` kibibytes made of repeated UNIT. */
@@ -171,7 +169,7 @@ for (const kib of SIZES_KIB) {
   }
 }
 
-console.log('\n=== URL field construction ===');
+console.log('\n=== URL destination source mapping ===');
 const urlBuildResults = [];
 for (const kib of URL_BUILD_SIZES_KIB) {
   const md = makeUrlInput(kib);
@@ -189,7 +187,7 @@ if (SMOKE) {
   console.log(`  ${'128 → 512 KiB growth'.padEnd(28)} ${ratio.toFixed(2)}x`);
   if (ratio > SMOKE_URL_BUILD_RATIO_MAX) {
     throw new Error(
-      `benchmark smoke failed: URL construction grew ${ratio.toFixed(2)}x `
+      `benchmark smoke failed: URL source mapping grew ${ratio.toFixed(2)}x `
       + `from 128 KiB to 512 KiB (budget ${SMOKE_URL_BUILD_RATIO_MAX}x)`,
     );
   }
