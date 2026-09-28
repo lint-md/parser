@@ -1,7 +1,7 @@
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
 import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-character-reference';
 import type { ParsedPoint } from '../types';
-import type { MarkdownSourceMapSegment, SourceSpan } from './types';
+import type { MarkdownSourceMapSegment } from './types';
 
 interface RecordingState {
   source: string
@@ -9,7 +9,8 @@ interface RecordingState {
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   emptyCodeOffsets: WeakMap<object, number>
-  urlSourceSpans: WeakMap<object, SourceSpan>
+  urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  emptyUrlOffsets: WeakMap<object, number>
 }
 
 interface SegmentMetadata {
@@ -24,6 +25,11 @@ interface PendingConstruct {
 }
 
 interface CodeValueRecording {
+  segments: MarkdownSourceMapSegment[]
+  valueLength: number
+}
+
+interface UrlRecording {
   segments: MarkdownSourceMapSegment[]
   valueLength: number
 }
@@ -138,7 +144,8 @@ interface CompileContext {
 /**
  * Build a `mdast` extension that records source mappings during compilation.
  * Its handlers record mappings for `text` and `inlineCode` values.
- * They also record fenced `code` values.
+ * They also record block `code` values.
+ * They record link and definition URL destinations.
  *
  * ⚠️ This couples to `mdast-util-from-markdown` / micromark INTERNALS, not the
  * public remark API. Upgrading any parser-sensitive dependency is a parser
@@ -169,6 +176,7 @@ export function recordingExtension(state: RecordingState) {
   let inlineCodeSegments: MarkdownSourceMapSegment[] | undefined;
   let fencedCodeRecording: FencedCodeRecording | undefined;
   let indentedCodeRecording: CodeValueRecording | undefined;
+  let urlRecording: UrlRecording | undefined;
   let pendingEmptyFencedCode: object | undefined;
   let lineIndentStart = 0;
 
@@ -214,7 +222,7 @@ export function recordingExtension(state: RecordingState) {
     this: CompileContext,
     token: any,
     metadata: SegmentMetadata,
-  ) {
+  ): string {
     const tail = this.stack.pop();
     const slice = this.sliceSerialize(token);
     const valueStart = tail.value.length;
@@ -228,6 +236,33 @@ export function recordingExtension(state: RecordingState) {
         ...metadata,
       });
     }
+    return slice;
+  };
+
+  const recordUrlSegment = (
+    metadata: SegmentMetadata,
+    valueLength: number,
+  ): void => {
+    if (!urlRecording)
+      return;
+    const previous = urlRecording.segments[urlRecording.segments.length - 1];
+    if (
+      metadata.kind === 'literal'
+      && previous?.kind === 'literal'
+      && previous.sourceEnd === metadata.sourceStart
+      && previous.valueEnd === urlRecording.valueLength
+    ) {
+      previous.valueEnd += valueLength;
+      previous.sourceEnd = metadata.sourceEnd;
+    }
+    else {
+      urlRecording.segments.push({
+        valueStart: urlRecording.valueLength,
+        valueEnd: urlRecording.valueLength + valueLength,
+        ...metadata,
+      });
+    }
+    urlRecording.valueLength += valueLength;
   };
 
   const onexitcharacterreferencevalue = function (this: CompileContext, token: any) {
@@ -264,6 +299,7 @@ export function recordingExtension(state: RecordingState) {
         kind,
       });
     }
+    recordUrlSegment({ ...construct, kind }, value.length);
   };
 
   const inlineCodeValueLength = (): number => {
@@ -571,18 +607,31 @@ export function recordingExtension(state: RecordingState) {
   };
 
   const onenterUrlDestination = function (this: CompileContext) {
+    if (urlRecording) {
+      throw new Error('A URL source map is already being recorded');
+    }
     this.buffer();
+    urlRecording = {
+      segments: [],
+      valueLength: 0,
+    };
   };
 
   const onexitUrlDestination = function (this: CompileContext, token: any) {
     const url = this.resume();
     const node = this.stack[this.stack.length - 1];
     node.url = url;
+    const recording = urlRecording;
+    urlRecording = undefined;
+    if (!recording) {
+      throw new Error('Missing URL source-map recording');
+    }
     if (node.type === 'link' || node.type === 'definition') {
-      state.urlSourceSpans.set(node, {
-        start: token.start.offset,
-        end: token.end.offset,
-      });
+      if (recording.valueLength === url.length) {
+        state.urlSegments.set(node, recording.segments);
+        if (url.length === 0)
+          state.emptyUrlOffsets.set(node, token.start.offset);
+      }
     }
   };
 
@@ -591,12 +640,10 @@ export function recordingExtension(state: RecordingState) {
     if (
       (node.type === 'link' || node.type === 'definition')
       && node.url === ''
-      && !state.urlSourceSpans.has(node)
+      && !state.urlSegments.has(node)
     ) {
-      state.urlSourceSpans.set(node, {
-        start: token.start.offset + 1,
-        end: token.end.offset - 1,
-      });
+      state.urlSegments.set(node, []);
+      state.emptyUrlOffsets.set(node, token.start.offset + 1);
     }
   };
 
@@ -609,13 +656,11 @@ export function recordingExtension(state: RecordingState) {
     if (
       node.type === 'link'
       && node.url === ''
-      && !state.urlSourceSpans.has(node)
+      && !state.urlSegments.has(node)
     ) {
       const emptyOffset = token.end.offset - 1;
-      state.urlSourceSpans.set(node, {
-        start: emptyOffset,
-        end: emptyOffset,
-      });
+      state.urlSegments.set(node, []);
+      state.emptyUrlOffsets.set(node, emptyOffset);
     }
   };
 
@@ -644,18 +689,22 @@ export function recordingExtension(state: RecordingState) {
       codeText: onexitcodetext,
       codeTextData: onexitcodetextdata,
       data(this: CompileContext, token: any) {
-        onexitdata.call(this, token, {
+        const metadata: SegmentMetadata = {
           sourceStart: token.start.offset,
           sourceEnd: token.end.offset,
           kind: 'literal',
-        });
+        };
+        const value = onexitdata.call(this, token, metadata);
+        recordUrlSegment(metadata, value.length);
       },
       characterEscapeValue(this: CompileContext, token: any) {
         const construct = takePendingConstruct();
-        onexitdata.call(this, token, {
+        const metadata: SegmentMetadata = {
           ...construct,
           kind: 'escape',
-        });
+        };
+        const value = onexitdata.call(this, token, metadata);
+        recordUrlSegment(metadata, value.length);
       },
       characterReferenceValue: onexitcharacterreferencevalue,
       blockQuotePrefix(this: CompileContext, token: any) {

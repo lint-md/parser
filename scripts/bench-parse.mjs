@@ -117,7 +117,6 @@ function makeState(source) {
     emptyCodeOffsets: new WeakMap(),
     urlSegments: new WeakMap(),
     emptyUrlOffsets: new WeakMap(),
-    urlSourceSpans: new WeakMap(),
   };
 }
 

@@ -1,6 +1,4 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
-import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-character-reference';
-import { decodeNamedCharacterReference } from 'decode-named-character-reference';
 import type { Root } from 'mdast';
 import type {
   MarkdownCodeNode,
@@ -24,7 +22,6 @@ import type {
   MarkdownSourceMapSegment,
   MarkdownValueSourceIndex,
   ParsedMarkdownDocument,
-  SourceSpan,
 } from './types';
 
 // Use the same parser extensions as `parseMd`.
@@ -49,8 +46,6 @@ interface RecordingState {
   urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** link / definition node -> source point for an empty URL. */
   emptyUrlOffsets: WeakMap<object, number>
-  /** link / definition node -> parser-confirmed destination content span. */
-  urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
 interface TraversableNode {
@@ -67,12 +62,6 @@ function hasStringField<Field extends 'value' | 'url'>(
 ): node is TraversableNode & Record<Field, string> {
   return field in node && typeof node[field] === 'string';
 }
-
-// micromark limits named character references to 31 code units; numeric
-// references are shorter. Include the leading `&` and trailing `;` so URL
-// mapping only considers parser-valid candidates and never scans an entire
-// destination for every literal ampersand.
-const MAX_CHARACTER_REFERENCE_SOURCE_LENGTH = 33;
 
 /**
  * Offsets (UTF-16 code units) of the first code unit of every line in `md`.
@@ -125,102 +114,6 @@ function pointAtOffset(lineStarts: number[], md: string, offset: number): Parsed
     column: offset - lineStart + 1,
     offset,
   };
-}
-
-function isEscapableUrlCharacter(char: number): boolean {
-  return (char >= 33 && char <= 47)
-    || (char >= 58 && char <= 64)
-    || (char >= 91 && char <= 96)
-    || (char >= 123 && char <= 126);
-}
-
-function characterReferenceEnd(
-  md: string,
-  start: number,
-  end: number,
-): number | undefined {
-  const limit = Math.min(end, start + MAX_CHARACTER_REFERENCE_SOURCE_LENGTH);
-  for (let offset = start + 1; offset < limit; offset++) {
-    if (md.charCodeAt(offset) === 59)
-      return offset;
-  }
-  return undefined;
-}
-
-interface UrlSegments {
-  segments: MarkdownSourceMapSegment[]
-  emptyOffset?: number
-}
-
-function buildUrlSegments(
-  md: string,
-  node: { url: string },
-  bounds: SourceSpan,
-): UrlSegments | undefined {
-  if (bounds.start === bounds.end) {
-    return node.url === ''
-      ? { segments: [], emptyOffset: bounds.start }
-      : undefined;
-  }
-  const segments: MarkdownSourceMapSegment[] = [];
-  let valueOffset = 0;
-  let valueMatch = true;
-  const add = (sourceStart: number, sourceEnd: number, output: string, kind: MarkdownSourceMapSegment['kind']) => {
-    segments.push({
-      valueStart: valueOffset,
-      valueEnd: valueOffset + output.length,
-      sourceStart,
-      sourceEnd,
-      kind,
-    });
-    if (valueMatch && !node.url.startsWith(output, valueOffset))
-      valueMatch = false;
-    valueOffset += output.length;
-  };
-  let literalStart = bounds.start;
-  const flushLiteral = (end: number): void => {
-    if (literalStart < end)
-      add(literalStart, end, md.slice(literalStart, end), 'literal');
-  };
-
-  for (let offset = bounds.start; offset < bounds.end;) {
-    const char = md.charCodeAt(offset);
-    if (char === 92 && offset + 1 < bounds.end && isEscapableUrlCharacter(md.charCodeAt(offset + 1))) {
-      flushLiteral(offset);
-      add(offset, offset + 2, md[offset + 1], 'escape');
-      offset += 2;
-      literalStart = offset;
-      continue;
-    }
-    if (char === 38) {
-      const semi = characterReferenceEnd(md, offset, bounds.end);
-      if (semi !== undefined) {
-        const body = md.slice(offset + 1, semi);
-        let decoded: string | false;
-        if (body.startsWith('#')) {
-          const numeric = body.slice(1);
-          const radix = numeric.startsWith('x') || numeric.startsWith('X') ? 16 : 10;
-          decoded = decodeNumericCharacterReference(
-            radix === 16 ? numeric.slice(1) : numeric,
-            radix,
-          );
-        }
-        else {
-          decoded = decodeNamedCharacterReference(body);
-        }
-        if (decoded !== false) {
-          flushLiteral(offset);
-          add(offset, semi + 1, decoded, 'character-reference');
-          offset = semi + 1;
-          literalStart = offset;
-          continue;
-        }
-      }
-    }
-    offset++;
-  }
-  flushLiteral(bounds.end);
-  return valueMatch && valueOffset === node.url.length ? { segments } : undefined;
 }
 
 /**
@@ -445,7 +338,6 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     emptyCodeOffsets: new WeakMap(),
     urlSegments: new WeakMap(),
     emptyUrlOffsets: new WeakMap(),
-    urlSourceSpans: new WeakMap(),
   };
 
   const tree = fromMarkdown(md, {
@@ -460,7 +352,6 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   let lineStarts: number[] | undefined;
 
   // The index records ownership and parse-time state for all nodes.
-  // It also builds mappings that the parser extension cannot produce.
   const owned = new WeakSet<object>();
   const originalValues = new WeakMap<object, string>();
   const originalUrls = new WeakMap<object, string>();
@@ -470,19 +361,6 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
 
   function indexNode(node: TraversableNode): void {
-    if (
-      (node.type === 'link' || node.type === 'definition')
-      && hasStringField(node, 'url')
-    ) {
-      const bounds = state.urlSourceSpans.get(node);
-      const segments = bounds ? buildUrlSegments(md, node, bounds) : undefined;
-      if (segments) {
-        state.urlSegments.set(node, segments.segments);
-        if (segments.emptyOffset !== undefined)
-          state.emptyUrlOffsets.set(node, segments.emptyOffset);
-      }
-    }
-
     owned.add(node);
     const mappedSegments = state.segments.get(node)
       || state.inlineCodeSegments.get(node)
