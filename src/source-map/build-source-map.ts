@@ -28,16 +28,17 @@ import type {
   SourceSpan,
 } from './types';
 
-// Use the exact same parser extensions as `parseMd` so the AST (and therefore
-// the tokenizer / mdast-extension decisions) are identical. Only the mdast
-// `text`-building handlers are swapped for recording ones; every other token
-// is compiled by the real `mdast-util-from-markdown` handlers.
+// Use the same parser extensions as `parseMd`.
+// This keeps tokenizer and mdast extension decisions identical.
+// Only replace the mdast handlers needed to record mapped values.
+// The replacements mirror the matching `mdast-util-from-markdown` AST behavior.
+// All other tokens use the standard handlers.
 const { micromarkExtensions, fromMarkdownExtensions } = getParserExtensions();
 
 interface RecordingState {
   /** node -> ordered, gap-free, non-overlapping segments. */
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
-  /** inlineCode node -> value segments (see buildInlineCodeSegments). */
+  /** inlineCode node -> parser-recorded value segments. */
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** code node -> value segments (see buildCodeSegments). */
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
@@ -123,101 +124,6 @@ function pointAtOffset(lineStarts: number[], md: string, offset: number): Parsed
     column: offset - lineStart + 1,
     offset,
   };
-}
-
-/**
- * Build the source-map segments for an `inlineCode` node.
- *
- * `inlineCode.value` is NOT a contiguous slice of the source: the GFM code
- * span algorithm (micromark `codeText` + `mdast-util-from-markdown`) strips one
- * leading and one trailing whitespace unit from the content when it contains
- * non-whitespace data. A unit is one space, LF, CR, or CRLF. The parser keeps
- * all remaining source code units verbatim, so every surviving value code unit
- * maps 1:1 to exactly one source code unit.
- *
- * The mapping is computed from the node's `position` (the full source span
- * including the backtick delimiters) plus `value`, replicating the GFM
- * resolver: identify its delimiters, then apply its single leading/trailing
- * whitespace-unit rule. This couples to the same parser-sensitive behavior as
- * the text mapping (see CONTRIBUTING).
- *
- * @returns ordered, gap-free, 1:1 segments, or undefined if the node has no
- *   usable position.
- *
- * @internal Used by buildSourceMap; not part of the public API.
- */
-function buildInlineCodeSegments(
-  md: string,
-  node: { value: string; position?: ParsedPosition },
-): MarkdownSourceMapSegment[] | undefined {
-  const position = node.position;
-  if (!position || !position.start || !position.end)
-    return undefined;
-  const start = position.start.offset;
-  const end = position.end.offset;
-  if (start < 0 || end > md.length || start >= end)
-    return undefined;
-
-  // Full source span including the backtick delimiters.
-  const full = md.slice(start, end);
-
-  // Determine the opening / closing backtick run lengths (they must match).
-  let openLen = 0;
-  while (openLen < full.length && full.charCodeAt(openLen) === 96 /* ` */) openLen++;
-  let closeLen = 0;
-  while (closeLen < full.length && full.charCodeAt(full.length - 1 - closeLen) === 96) closeLen++;
-  if (openLen === 0 || closeLen === 0 || openLen !== closeLen)
-    return undefined;
-
-  const interiorStart = start + openLen;
-  const interiorEnd = end - closeLen;
-  const interior = md.slice(interiorStart, interiorEnd);
-
-  const isWhitespace = (char: number): boolean =>
-    char === 32 || char === 10 || char === 13;
-  const leadingWhitespaceEnd = (): number => {
-    const first = interior.charCodeAt(0);
-    if (first === 13 && interior.charCodeAt(1) === 10)
-      return 2;
-    return isWhitespace(first) ? 1 : 0;
-  };
-  const trailingWhitespaceStart = (): number => {
-    const last = interior.charCodeAt(interior.length - 1);
-    if (last === 10 && interior.charCodeAt(interior.length - 2) === 13) {
-      return interior.length - 2;
-    }
-    return isWhitespace(last) ? interior.length - 1 : interior.length;
-  };
-
-  let valueSourceStart = 0;
-  let valueSourceEnd = interior.length;
-  const leadingEnd = leadingWhitespaceEnd();
-  const trailingStart = trailingWhitespaceStart();
-  let hasData = false;
-  for (let i = 0; i < interior.length; i++) {
-    if (!isWhitespace(interior.charCodeAt(i))) {
-      hasData = true;
-      break;
-    }
-  }
-  if (leadingEnd > 0 && trailingStart < interior.length && hasData) {
-    valueSourceStart = leadingEnd;
-    valueSourceEnd = trailingStart;
-  }
-
-  // Confirm that the parser did not apply an unaccounted-for transformation.
-  // Returning undefined is safer than fabricating a source range.
-  const sourceValue = interior.slice(valueSourceStart, valueSourceEnd);
-  if (sourceValue !== node.value || sourceValue.length === 0)
-    return undefined;
-
-  return [{
-    valueStart: 0,
-    valueEnd: sourceValue.length,
-    sourceStart: interiorStart + valueSourceStart,
-    sourceEnd: interiorStart + valueSourceEnd,
-    kind: 'literal',
-  }];
 }
 
 function isEscapableUrlCharacter(char: number): boolean {
@@ -562,17 +468,6 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const sourceGapPrefixes = new WeakMap<MarkdownSourceMapSegment[], number[]>();
 
   function indexNode(node: TraversableNode): void {
-    // The standard mdast handler compiles inline code.
-    // The completed node contains enough data to build its mapping.
-    if (
-      node.type === 'inlineCode'
-      && hasStringField(node, 'value')
-    ) {
-      const segments = buildInlineCodeSegments(md, node);
-      if (segments)
-        state.inlineCodeSegments.set(node, segments);
-    }
-
     if (
       node.type === 'code'
       && hasStringField(node, 'value')

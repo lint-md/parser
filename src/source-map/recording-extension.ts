@@ -5,6 +5,7 @@ import type { MarkdownSourceMapSegment, SourceSpan } from './types';
 
 interface RecordingState {
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
+  inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
@@ -32,6 +33,8 @@ const createText = () => ({ type: 'text', value: '' });
 interface CompileContext {
   stack: Array<any>
   config: { canContainEols: string[] }
+  enter: (node: any, token: any) => void
+  exit: (token: any) => void
   getData: (key: string) => unknown
   setData: (key: string, value?: unknown) => void
   sliceSerialize: (token: any) => string
@@ -40,24 +43,25 @@ interface CompileContext {
 }
 
 /**
- * Build a `mdast`-extension whose `text`-building handlers record, alongside
- * the normal AST construction, the mapping from each `text` node's normalized
- * `value` back to the raw Markdown source.
+ * Build a `mdast` extension that records source mappings during compilation.
+ * Its handlers record mappings for `text` and `inlineCode` values.
  *
  * ⚠️ This couples to `mdast-util-from-markdown` / micromark INTERNALS, not the
  * public remark API. Upgrading any parser-sensitive dependency is a parser
  * behavior upgrade — see CONTRIBUTING.md. The undocumented upstream contracts
  * this relies on are:
  *
- * - token event handler names (enter/exit): `data`, `characterEscape` /
+ * - token event handler names (enter/exit): `data`, `codeText`, `codeTextData`,
+ *   `characterEscape` /
  *   `characterEscapeValue`, `characterReference` / `characterReferenceValue`,
  *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`,
  *   `resourceDestinationString`, `definitionDestinationString`, their literal
  *   wrappers, and `resource`.
  * - compile-context fields on `this` ({@link CompileContext}): `stack` (the AST
- *   build stack), `config.canContainEols` (whether a line ending is merged into
- *   text), `getData` / `setData` for the keys `characterReferenceType`,
- *   `atHardBreak`, `setextHeadingSlurpLineEnding`, and `sliceSerialize`.
+ *   build stack), `enter` / `exit`, `config.canContainEols` (whether a line
+ *   ending is merged into text), and `getData` / `setData`.
+ *   The handlers use the `characterReferenceType`, `atHardBreak`, and
+ *   `setextHeadingSlurpLineEnding` data keys. They also use `sliceSerialize`.
  * - entity decoding must match remark's own: `decodeNumericCharacterReference` /
  *   `decodeNamedCharacterReference` are pinned to the versions remark uses so
  *   decoding does not drift.
@@ -67,6 +71,7 @@ interface CompileContext {
  */
 export function recordingExtension(state: RecordingState) {
   let pendingConstruct: PendingConstruct | undefined;
+  let inlineCodeSegments: MarkdownSourceMapSegment[] | undefined;
 
   const takePendingConstruct = (): PendingConstruct => {
     if (!pendingConstruct) {
@@ -162,6 +167,34 @@ export function recordingExtension(state: RecordingState) {
     }
   };
 
+  const inlineCodeValueLength = (): number => {
+    const tail = inlineCodeSegments?.[inlineCodeSegments.length - 1];
+    return tail?.valueEnd ?? 0;
+  };
+
+  const recordInlineCodeSegment = function (this: CompileContext, token: any) {
+    if (!inlineCodeSegments)
+      return;
+    const valueLength = this.sliceSerialize(token).length;
+    const previous = inlineCodeSegments[inlineCodeSegments.length - 1];
+    if (
+      previous
+      && previous.sourceEnd === token.start.offset
+    ) {
+      previous.valueEnd += valueLength;
+      previous.sourceEnd = token.end.offset;
+      return;
+    }
+    const valueStart = inlineCodeValueLength();
+    inlineCodeSegments.push({
+      valueStart,
+      valueEnd: valueStart + valueLength,
+      sourceStart: token.start.offset,
+      sourceEnd: token.end.offset,
+      kind: 'literal',
+    });
+  };
+
   const onexitlineending = function (this: CompileContext, token: any) {
     if (this.getData('atHardBreak')) {
       const tail = this.stack[this.stack.length - 1].children.slice(-1)[0];
@@ -180,7 +213,49 @@ export function recordingExtension(state: RecordingState) {
         sourceEnd: token.end.offset,
         kind: 'literal',
       });
+      recordInlineCodeSegment.call(this, token);
     }
+  };
+
+  const onentercodetext = function (this: CompileContext, token: any) {
+    if (inlineCodeSegments) {
+      throw new Error('An inline code source map is already being recorded');
+    }
+    this.enter({ type: 'inlineCode', value: '' }, token);
+    this.buffer();
+    inlineCodeSegments = [];
+  };
+
+  const onentercodetextdata = function (this: CompileContext, token: any) {
+    const node = this.stack[this.stack.length - 1];
+    let tail = node.children[node.children.length - 1];
+    if (!tail || tail.type !== 'text') {
+      tail = createText();
+      tail.position = { start: point(token.start) };
+      node.children.push(tail);
+    }
+    this.stack.push(tail);
+  };
+
+  const onexitcodetextdata = function (this: CompileContext, token: any) {
+    const tail = this.stack.pop();
+    const slice = this.sliceSerialize(token);
+    tail.value += slice;
+    tail.position.end = point(token.end);
+    recordInlineCodeSegment.call(this, token);
+  };
+
+  const onexitcodetext = function (this: CompileContext, token: any) {
+    const value = this.resume();
+    const node = this.stack[this.stack.length - 1];
+    node.value = value;
+    const segments = inlineCodeSegments;
+    const mappedValueLength = inlineCodeValueLength();
+    inlineCodeSegments = undefined;
+    if (segments && mappedValueLength === value.length) {
+      state.inlineCodeSegments.set(node, segments);
+    }
+    this.exit(token);
   };
 
   const onexitautolinkprotocol = function (this: CompileContext, token: any) {
@@ -254,6 +329,8 @@ export function recordingExtension(state: RecordingState) {
 
   return {
     enter: {
+      codeText: onentercodetext,
+      codeTextData: onentercodetextdata,
       data: onenterdata,
       characterEscape: onenterConstruct,
       characterReference: onenterConstruct,
@@ -263,6 +340,8 @@ export function recordingExtension(state: RecordingState) {
       resourceDestinationString: onenterUrlDestination,
     },
     exit: {
+      codeText: onexitcodetext,
+      codeTextData: onexitcodetextdata,
       data(this: CompileContext, token: any) {
         onexitdata.call(this, token, {
           sourceStart: token.start.offset,
