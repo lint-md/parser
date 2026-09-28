@@ -6,6 +6,8 @@ import type { MarkdownSourceMapSegment, SourceSpan } from './types';
 interface RecordingState {
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
+  emptyCodeOffsets: WeakMap<object, number>
   urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
@@ -20,6 +22,13 @@ interface PendingConstruct {
   sourceEnd: number
 }
 
+interface FencedCodeRecording {
+  segments: MarkdownSourceMapSegment[]
+  valueLength: number
+  emptyOffset: number
+  sawOpeningLineEnding: boolean
+}
+
 const REPLACEMENT_CHARACTER = '�';
 
 const point = (d: { line: number; column: number; offset: number }): ParsedPoint => ({
@@ -29,6 +38,43 @@ const point = (d: { line: number; column: number; offset: number }): ParsedPoint
 });
 
 const createText = () => ({ type: 'text', value: '' });
+
+function sliceLiteralSegments(
+  segments: MarkdownSourceMapSegment[],
+  valueStart: number,
+  valueEnd: number,
+): MarkdownSourceMapSegment[] | undefined {
+  const result: MarkdownSourceMapSegment[] = [];
+  for (const segment of segments) {
+    const start = Math.max(segment.valueStart, valueStart);
+    const end = Math.min(segment.valueEnd, valueEnd);
+    if (start >= end)
+      continue;
+    const sourceStart = segment.sourceStart + start - segment.valueStart;
+    const sourceEnd = segment.sourceStart + end - segment.valueStart;
+    const previous = result[result.length - 1];
+    if (previous && previous.sourceEnd === sourceStart) {
+      previous.valueEnd = end - valueStart;
+      previous.sourceEnd = sourceEnd;
+    }
+    else {
+      result.push({
+        valueStart: start - valueStart,
+        valueEnd: end - valueStart,
+        sourceStart,
+        sourceEnd,
+        kind: 'literal',
+      });
+    }
+  }
+  let mappedLength = 0;
+  for (const segment of result) {
+    if (segment.valueStart !== mappedLength)
+      return undefined;
+    mappedLength = segment.valueEnd;
+  }
+  return mappedLength === valueEnd - valueStart ? result : undefined;
+}
 
 interface CompileContext {
   stack: Array<any>
@@ -44,7 +90,7 @@ interface CompileContext {
 
 /**
  * Build a `mdast` extension that records source mappings during compilation.
- * Its handlers record mappings for `text` and `inlineCode` values.
+ * Its handlers record mappings for `text`, `inlineCode`, and fenced `code` values.
  *
  * ⚠️ This couples to `mdast-util-from-markdown` / micromark INTERNALS, not the
  * public remark API. Upgrading any parser-sensitive dependency is a parser
@@ -52,7 +98,7 @@ interface CompileContext {
  * this relies on are:
  *
  * - token event handler names (enter/exit): `data`, `codeText`, `codeTextData`,
- *   `characterEscape` /
+ *   `codeFenced`, `codeFencedFence`, `codeFlowValue`, `characterEscape` /
  *   `characterEscapeValue`, `characterReference` / `characterReferenceValue`,
  *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`,
  *   `resourceDestinationString`, `definitionDestinationString`, their literal
@@ -72,6 +118,7 @@ interface CompileContext {
 export function recordingExtension(state: RecordingState) {
   let pendingConstruct: PendingConstruct | undefined;
   let inlineCodeSegments: MarkdownSourceMapSegment[] | undefined;
+  let fencedCodeRecording: FencedCodeRecording | undefined;
 
   const takePendingConstruct = (): PendingConstruct => {
     if (!pendingConstruct) {
@@ -195,6 +242,32 @@ export function recordingExtension(state: RecordingState) {
     });
   };
 
+  const recordFencedCodeSegment = function (this: CompileContext, token: any) {
+    const recording = fencedCodeRecording;
+    if (!recording)
+      return;
+    const valueLength = this.sliceSerialize(token).length;
+    const sourceStart = token.start.offset;
+    // A line-ending token can include the next container prefix in its bounds.
+    // `sliceSerialize` excludes that prefix from the compiled value.
+    const sourceEnd = sourceStart + valueLength;
+    const previous = recording.segments[recording.segments.length - 1];
+    if (previous && previous.sourceEnd === sourceStart) {
+      previous.valueEnd += valueLength;
+      previous.sourceEnd = sourceEnd;
+    }
+    else {
+      recording.segments.push({
+        valueStart: recording.valueLength,
+        valueEnd: recording.valueLength + valueLength,
+        sourceStart,
+        sourceEnd,
+        kind: 'literal',
+      });
+    }
+    recording.valueLength += valueLength;
+  };
+
   const onexitlineending = function (this: CompileContext, token: any) {
     if (this.getData('atHardBreak')) {
       const tail = this.stack[this.stack.length - 1].children.slice(-1)[0];
@@ -214,6 +287,13 @@ export function recordingExtension(state: RecordingState) {
         kind: 'literal',
       });
       recordInlineCodeSegment.call(this, token);
+      if (fencedCodeRecording) {
+        if (!fencedCodeRecording.sawOpeningLineEnding) {
+          fencedCodeRecording.emptyOffset = token.end.offset;
+          fencedCodeRecording.sawOpeningLineEnding = true;
+        }
+        recordFencedCodeSegment.call(this, token);
+      }
     }
   };
 
@@ -255,6 +335,64 @@ export function recordingExtension(state: RecordingState) {
     if (segments && mappedValueLength === value.length) {
       state.inlineCodeSegments.set(node, segments);
     }
+    this.exit(token);
+  };
+
+  const onentercodefenced = function (this: CompileContext, token: any) {
+    if (fencedCodeRecording) {
+      throw new Error('A fenced code source map is already being recorded');
+    }
+    this.enter({ type: 'code', lang: null, meta: null, value: '' }, token);
+    fencedCodeRecording = {
+      segments: [],
+      valueLength: 0,
+      emptyOffset: token.start.offset,
+      sawOpeningLineEnding: false,
+    };
+  };
+
+  const onexitcodefencedfence = function (this: CompileContext, token: any) {
+    if (this.getData('flowCodeInside'))
+      return;
+    this.buffer();
+    this.setData('flowCodeInside', true);
+    if (fencedCodeRecording)
+      fencedCodeRecording.emptyOffset = token.end.offset;
+  };
+
+  const onexitcodeflowvalue = function (this: CompileContext, token: any) {
+    onexitdata.call(this, token, {
+      sourceStart: token.start.offset,
+      sourceEnd: token.end.offset,
+      kind: 'literal',
+    });
+    recordFencedCodeSegment.call(this, token);
+  };
+
+  const onexitcodefenced = function (this: CompileContext, token: any) {
+    const data = this.resume();
+    const node = this.stack[this.stack.length - 1];
+    if (!node || node.type !== 'code') {
+      throw new Error('Expected code node while recording fenced code');
+    }
+    const value = data.replace(/^(\r?\n|\r)|(\r?\n|\r)$/g, '');
+    node.value = value;
+    const recording = fencedCodeRecording;
+    fencedCodeRecording = undefined;
+    if (!recording) {
+      throw new Error('Missing fenced code source-map recording');
+    }
+    const leadingLineEnding = /^(\r?\n|\r)/.exec(data)?.[0].length ?? 0;
+    const segments = sliceLiteralSegments(
+      recording.segments,
+      leadingLineEnding,
+      leadingLineEnding + value.length,
+    );
+    if (segments) {
+      state.codeSegments.set(node, segments);
+      state.emptyCodeOffsets.set(node, recording.emptyOffset);
+    }
+    this.setData('flowCodeInside');
     this.exit(token);
   };
 
@@ -329,6 +467,8 @@ export function recordingExtension(state: RecordingState) {
 
   return {
     enter: {
+      codeFenced: onentercodefenced,
+      codeFlowValue: onenterdata,
       codeText: onentercodetext,
       codeTextData: onentercodetextdata,
       data: onenterdata,
@@ -340,6 +480,9 @@ export function recordingExtension(state: RecordingState) {
       resourceDestinationString: onenterUrlDestination,
     },
     exit: {
+      codeFenced: onexitcodefenced,
+      codeFencedFence: onexitcodefencedfence,
+      codeFlowValue: onexitcodeflowvalue,
       codeText: onexitcodetext,
       codeTextData: onexitcodetextdata,
       data(this: CompileContext, token: any) {

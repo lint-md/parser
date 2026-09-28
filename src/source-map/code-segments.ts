@@ -68,67 +68,6 @@ function skipBlockQuoteMarkers(
   return offset;
 }
 
-function skipIndentation(
-  md: string,
-  start: number,
-  end: number,
-  columns: number,
-): number {
-  let offset = start;
-  let removed = 0;
-  while (offset < end && removed < columns) {
-    const char = md.charCodeAt(offset);
-    if (char === 32) {
-      offset++;
-      removed++;
-    }
-    else if (char === 9) {
-      offset++;
-      removed += 4 - (removed % 4);
-    }
-    else {
-      break;
-    }
-  }
-  return offset;
-}
-
-function fencedIndentation(
-  md: string,
-  lineStartOffset: number,
-  fenceStart: number,
-  quoteDepth: number,
-): number {
-  let offset = lineStartOffset;
-  if (quoteDepth > 0) {
-    const afterMarkers = skipBlockQuoteMarkers(
-      md,
-      lineStartOffset,
-      fenceStart,
-      quoteDepth,
-    );
-    if (afterMarkers === undefined)
-      return -1;
-    offset = afterMarkers;
-  }
-  let indentation = 0;
-  while (offset < fenceStart) {
-    const char = md.charCodeAt(offset);
-    if (char === 32) {
-      offset++;
-      indentation++;
-    }
-    else if (char === 9) {
-      offset++;
-      indentation += 4 - (indentation % 4);
-    }
-    else {
-      return -1;
-    }
-  }
-  return indentation;
-}
-
 function trimTrailingLineEnding(md: string, spans: SourceSpan[]): void {
   const last = spans[spans.length - 1];
   if (!last)
@@ -187,88 +126,6 @@ function segmentsFromSpans(
     valueOffset += length;
   }
   return valueOffset === value.length ? segments : undefined;
-}
-
-function buildFencedCodeSegments(
-  md: string,
-  node: { value: string; position?: ParsedPosition },
-): CodeSegments | undefined {
-  const position = node.position;
-  if (!position)
-    return undefined;
-  const start = position.start.offset;
-  const end = position.end.offset;
-  const marker = md.charCodeAt(start);
-  if (marker !== 96 && marker !== 126)
-    return undefined;
-
-  let fenceLength = 0;
-  while (md.charCodeAt(start + fenceLength) === marker) fenceLength++;
-  if (fenceLength < 3)
-    return undefined;
-
-  const physicalLineStart = lineStart(md, 0, start);
-  const quoteDepth = blockQuoteDepth(md, physicalLineStart, start);
-  const openingIndent = fencedIndentation(md, physicalLineStart, start, quoteDepth);
-  if (openingIndent < 0)
-    return undefined;
-  // A blockquote code node can end before its final physical line ending, so
-  // derive the opening line boundary from the complete Markdown rather than
-  // the node's position span. This keeps an unclosed empty fence's insertion
-  // point at the actual EOF.
-  const openingLineEnd = lineEnd(md, start, md.length);
-  let contentEnd = end;
-  let hasClosingFence = false;
-  const closingLineStart = lineStart(md, start, end);
-  let closingFenceStart = openingLineEnd;
-  if (closingLineStart >= openingLineEnd && closingLineStart < end) {
-    const closingStart = quoteDepth === 0
-      ? closingLineStart
-      : skipBlockQuoteMarkers(md, closingLineStart, end, quoteDepth);
-    if (closingStart === undefined)
-      return undefined;
-    closingFenceStart = closingStart;
-    closingFenceStart = skipIndentation(
-      md,
-      closingFenceStart,
-      end,
-      openingIndent,
-    );
-    const closing = md.slice(closingFenceStart, end);
-    const closingMatch = /^( {0,3})(`+|~+)[ \t]*$/.exec(closing);
-    if (
-      closingMatch
-      && closingMatch[2].charCodeAt(0) === marker
-      && closingMatch[2].length >= fenceLength
-    ) {
-      contentEnd = closingLineStart;
-      hasClosingFence = true;
-    }
-  }
-
-  const spans: SourceSpan[] = [];
-  let offset = openingLineEnd;
-  while (offset < contentEnd) {
-    const endOfLine = lineEnd(md, offset, contentEnd);
-    let contentStart = quoteDepth === 0
-      ? offset
-      : skipBlockQuoteMarkers(md, offset, endOfLine, quoteDepth);
-    if (contentStart === undefined)
-      return undefined;
-    contentStart = skipIndentation(md, contentStart, endOfLine, openingIndent);
-    spans.push({ start: contentStart, end: endOfLine });
-    offset = endOfLine;
-  }
-  const emptyOffset = spans[0]?.start
-    ?? (hasClosingFence ? closingFenceStart : openingLineEnd);
-  trimTrailingLineEnding(md, spans);
-  const segments = segmentsFromSpans(md, spans, node.value);
-  if (!segments)
-    return undefined;
-  return {
-    segments,
-    emptyOffset,
-  };
 }
 
 function buildIndentedCodeSegmentsFromIndentation(
@@ -422,12 +279,5 @@ export function buildCodeSegments(
   md: string,
   node: { value: string; position?: ParsedPosition },
 ): CodeSegments | undefined {
-  const position = node.position;
-  if (!position)
-    return undefined;
-  const start = position.start.offset;
-  const marker = md.charCodeAt(start);
-  return marker === 96 || marker === 126
-    ? buildFencedCodeSegments(md, node)
-    : buildIndentedCodeSegments(md, node);
+  return buildIndentedCodeSegments(md, node);
 }
