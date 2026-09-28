@@ -64,6 +64,17 @@ describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
     });
   });
 
+  test('maps whitespace-only content from parser events', () => {
+    const md = '`  `';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'inlineCode')[0];
+    expect(node.value).toBe('  ');
+    expect(sourceMap.getSourceRange(node, 0, node.value.length)).toEqual({
+      start: { line: 1, column: 2, offset: 1 },
+      end: { line: 1, column: 4, offset: 3 },
+    });
+  });
+
   test.each(['\n', '\r', '\r\n'])(
     'maps %p code units individually after padding normalization',
     (lineEnding) => {
