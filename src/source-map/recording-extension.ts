@@ -27,6 +27,13 @@ interface FencedCodeRecording {
   valueLength: number
   emptyOffset: number
   sawOpeningLineEnding: boolean
+  sawContentAfterOpening: boolean
+  sawClosingFence: boolean
+}
+
+interface PendingEmptyFencedCode {
+  node: object
+  recording: FencedCodeRecording
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -119,6 +126,7 @@ export function recordingExtension(state: RecordingState) {
   let pendingConstruct: PendingConstruct | undefined;
   let inlineCodeSegments: MarkdownSourceMapSegment[] | undefined;
   let fencedCodeRecording: FencedCodeRecording | undefined;
+  let pendingEmptyFencedCode: PendingEmptyFencedCode | undefined;
 
   const takePendingConstruct = (): PendingConstruct => {
     if (!pendingConstruct) {
@@ -269,6 +277,11 @@ export function recordingExtension(state: RecordingState) {
   };
 
   const onexitlineending = function (this: CompileContext, token: any) {
+    if (pendingEmptyFencedCode) {
+      const emptyOffset = token.start.offset + this.sliceSerialize(token).length;
+      state.emptyCodeOffsets.set(pendingEmptyFencedCode.node, emptyOffset);
+      pendingEmptyFencedCode = undefined;
+    }
     if (this.getData('atHardBreak')) {
       const tail = this.stack[this.stack.length - 1].children.slice(-1)[0];
       tail.position.end = point(token.end);
@@ -289,8 +302,16 @@ export function recordingExtension(state: RecordingState) {
       recordInlineCodeSegment.call(this, token);
       if (fencedCodeRecording) {
         if (!fencedCodeRecording.sawOpeningLineEnding) {
-          fencedCodeRecording.emptyOffset = token.end.offset;
+          const lineEndingEnd = token.start.offset
+            + this.sliceSerialize(token).length;
+          fencedCodeRecording.emptyOffset = Math.max(
+            token.end.offset,
+            lineEndingEnd,
+          );
           fencedCodeRecording.sawOpeningLineEnding = true;
+        }
+        else {
+          fencedCodeRecording.sawContentAfterOpening = true;
         }
         recordFencedCodeSegment.call(this, token);
       }
@@ -348,16 +369,34 @@ export function recordingExtension(state: RecordingState) {
       valueLength: 0,
       emptyOffset: token.start.offset,
       sawOpeningLineEnding: false,
+      sawContentAfterOpening: false,
+      sawClosingFence: false,
     };
   };
 
   const onexitcodefencedfence = function (this: CompileContext, token: any) {
-    if (this.getData('flowCodeInside'))
+    if (this.getData('flowCodeInside')) {
+      if (fencedCodeRecording)
+        fencedCodeRecording.sawClosingFence = true;
       return;
+    }
     this.buffer();
     this.setData('flowCodeInside', true);
     if (fencedCodeRecording)
       fencedCodeRecording.emptyOffset = token.end.offset;
+  };
+
+  const onexitcodefencedfencesequence = function (
+    this: CompileContext,
+    token: any,
+  ) {
+    if (
+      this.getData('flowCodeInside')
+      && fencedCodeRecording
+      && !fencedCodeRecording.sawContentAfterOpening
+    ) {
+      fencedCodeRecording.emptyOffset = token.start.offset;
+    }
   };
 
   const onexitcodeflowvalue = function (this: CompileContext, token: any) {
@@ -366,6 +405,8 @@ export function recordingExtension(state: RecordingState) {
       sourceEnd: token.end.offset,
       kind: 'literal',
     });
+    if (fencedCodeRecording)
+      fencedCodeRecording.sawContentAfterOpening = true;
     recordFencedCodeSegment.call(this, token);
   };
 
@@ -391,6 +432,13 @@ export function recordingExtension(state: RecordingState) {
     if (segments) {
       state.codeSegments.set(node, segments);
       state.emptyCodeOffsets.set(node, recording.emptyOffset);
+    }
+    if (
+      value.length === 0
+      && !recording.sawOpeningLineEnding
+      && !recording.sawClosingFence
+    ) {
+      pendingEmptyFencedCode = { node, recording };
     }
     this.setData('flowCodeInside');
     this.exit(token);
@@ -482,6 +530,7 @@ export function recordingExtension(state: RecordingState) {
     exit: {
       codeFenced: onexitcodefenced,
       codeFencedFence: onexitcodefencedfence,
+      codeFencedFenceSequence: onexitcodefencedfencesequence,
       codeFlowValue: onexitcodeflowvalue,
       codeText: onexitcodetext,
       codeTextData: onexitcodetextdata,
