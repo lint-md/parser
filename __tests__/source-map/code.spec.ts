@@ -218,6 +218,17 @@ describe('parseMdWithSourceMap: code.value → raw source', () => {
     expect(sourceMap.getSourceRange(node, 0, 0).start.offset).toBe(4);
   });
 
+  test('preserves the empty range before extra closing-fence indentation', () => {
+    const md = '```\n  ```';
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    const node = nodesOfType(ast, 'code')[0];
+    expect(node.value).toBe('');
+
+    const range = sourceMap.getSourceRange(node, 0, 0);
+    expect(range.start.offset).toBe(4);
+    expect(range.end.offset).toBe(4);
+  });
+
   test.each([
     ['```', 3],
     ['~~~', 3],

@@ -4,6 +4,7 @@ import type { ParsedPoint } from '../types';
 import type { MarkdownSourceMapSegment, SourceSpan } from './types';
 
 interface RecordingState {
+  source?: string
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
@@ -29,11 +30,8 @@ interface FencedCodeRecording {
   sawOpeningLineEnding: boolean
   sawContentAfterOpening: boolean
   sawClosingFence: boolean
-}
-
-interface PendingEmptyFencedCode {
-  node: object
-  recording: FencedCodeRecording
+  openingIndent: number
+  closingFenceStart?: number
 }
 
 const REPLACEMENT_CHARACTER = '�';
@@ -83,6 +81,45 @@ function sliceLiteralSegments(
   return mappedLength === valueEnd - valueStart ? result : undefined;
 }
 
+function indentationColumns(source: string, start: number, end: number): number {
+  let columns = 0;
+  for (let offset = start; offset < end; offset++) {
+    const char = source.charCodeAt(offset);
+    if (char === 32)
+      columns++;
+    else if (char === 9)
+      columns += 4 - (columns % 4);
+    else
+      return 0;
+  }
+  return columns;
+}
+
+function skipIndentationColumns(
+  source: string,
+  start: number,
+  end: number,
+  columns: number,
+): number {
+  let offset = start;
+  let removed = 0;
+  while (offset < end && removed < columns) {
+    const char = source.charCodeAt(offset);
+    if (char === 32) {
+      offset++;
+      removed++;
+    }
+    else if (char === 9) {
+      offset++;
+      removed += 4 - (removed % 4);
+    }
+    else {
+      break;
+    }
+  }
+  return offset;
+}
+
 interface CompileContext {
   stack: Array<any>
   config: { canContainEols: string[] }
@@ -97,7 +134,8 @@ interface CompileContext {
 
 /**
  * Build a `mdast` extension that records source mappings during compilation.
- * Its handlers record mappings for `text`, `inlineCode`, and fenced `code` values.
+ * Its handlers record mappings for `text` and `inlineCode` values.
+ * They also record fenced `code` values.
  *
  * ⚠️ This couples to `mdast-util-from-markdown` / micromark INTERNALS, not the
  * public remark API. Upgrading any parser-sensitive dependency is a parser
@@ -105,7 +143,8 @@ interface CompileContext {
  * this relies on are:
  *
  * - token event handler names (enter/exit): `data`, `codeText`, `codeTextData`,
- *   `codeFenced`, `codeFencedFence`, `codeFlowValue`, `characterEscape` /
+ *   `codeFenced`, `codeFencedFence`, `codeFencedFenceSequence`,
+ *   `codeFlowValue`, `blockQuotePrefix`, `characterEscape` /
  *   `characterEscapeValue`, `characterReference` / `characterReferenceValue`,
  *   `lineEnding`, `autolinkProtocol`, `autolinkEmail`,
  *   `resourceDestinationString`, `definitionDestinationString`, their literal
@@ -126,7 +165,8 @@ export function recordingExtension(state: RecordingState) {
   let pendingConstruct: PendingConstruct | undefined;
   let inlineCodeSegments: MarkdownSourceMapSegment[] | undefined;
   let fencedCodeRecording: FencedCodeRecording | undefined;
-  let pendingEmptyFencedCode: PendingEmptyFencedCode | undefined;
+  let pendingEmptyFencedCode: object | undefined;
+  let lineIndentStart = 0;
 
   const takePendingConstruct = (): PendingConstruct => {
     if (!pendingConstruct) {
@@ -277,11 +317,13 @@ export function recordingExtension(state: RecordingState) {
   };
 
   const onexitlineending = function (this: CompileContext, token: any) {
+    const lineEndingLength = this.sliceSerialize(token).length;
     if (pendingEmptyFencedCode) {
-      const emptyOffset = token.start.offset + this.sliceSerialize(token).length;
-      state.emptyCodeOffsets.set(pendingEmptyFencedCode.node, emptyOffset);
+      const emptyOffset = token.start.offset + lineEndingLength;
+      state.emptyCodeOffsets.set(pendingEmptyFencedCode, emptyOffset);
       pendingEmptyFencedCode = undefined;
     }
+    lineIndentStart = token.start.offset + lineEndingLength;
     if (this.getData('atHardBreak')) {
       const tail = this.stack[this.stack.length - 1].children.slice(-1)[0];
       tail.position.end = point(token.end);
@@ -303,7 +345,7 @@ export function recordingExtension(state: RecordingState) {
       if (fencedCodeRecording) {
         if (!fencedCodeRecording.sawOpeningLineEnding) {
           const lineEndingEnd = token.start.offset
-            + this.sliceSerialize(token).length;
+            + lineEndingLength;
           fencedCodeRecording.emptyOffset = Math.max(
             token.end.offset,
             lineEndingEnd,
@@ -371,7 +413,18 @@ export function recordingExtension(state: RecordingState) {
       sawOpeningLineEnding: false,
       sawContentAfterOpening: false,
       sawClosingFence: false,
+      openingIndent: state.source
+        ? indentationColumns(state.source, lineIndentStart, token.start.offset)
+        : 0,
     };
+  };
+
+  const onentercodefencedfence = function (
+    this: CompileContext,
+    token: any,
+  ) {
+    if (this.getData('flowCodeInside') && fencedCodeRecording)
+      fencedCodeRecording.closingFenceStart = token.start.offset;
   };
 
   const onexitcodefencedfence = function (this: CompileContext, token: any) {
@@ -395,7 +448,16 @@ export function recordingExtension(state: RecordingState) {
       && fencedCodeRecording
       && !fencedCodeRecording.sawContentAfterOpening
     ) {
-      fencedCodeRecording.emptyOffset = token.start.offset;
+      const closingStart = fencedCodeRecording.closingFenceStart
+        ?? token.start.offset;
+      fencedCodeRecording.emptyOffset = state.source
+        ? skipIndentationColumns(
+          state.source,
+          closingStart,
+          token.start.offset,
+          fencedCodeRecording.openingIndent,
+        )
+        : token.start.offset;
     }
   };
 
@@ -438,7 +500,7 @@ export function recordingExtension(state: RecordingState) {
       && !recording.sawOpeningLineEnding
       && !recording.sawClosingFence
     ) {
-      pendingEmptyFencedCode = { node, recording };
+      pendingEmptyFencedCode = node;
     }
     this.setData('flowCodeInside');
     this.exit(token);
@@ -516,6 +578,7 @@ export function recordingExtension(state: RecordingState) {
   return {
     enter: {
       codeFenced: onentercodefenced,
+      codeFencedFence: onentercodefencedfence,
       codeFlowValue: onenterdata,
       codeText: onentercodetext,
       codeTextData: onentercodetextdata,
@@ -549,6 +612,9 @@ export function recordingExtension(state: RecordingState) {
         });
       },
       characterReferenceValue: onexitcharacterreferencevalue,
+      blockQuotePrefix(this: CompileContext, token: any) {
+        lineIndentStart = token.end.offset;
+      },
       lineEnding: onexitlineending,
       autolinkProtocol: onexitautolinkprotocol,
       autolinkEmail: onexitautolinkemail,
