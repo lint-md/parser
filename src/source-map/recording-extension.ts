@@ -4,7 +4,7 @@ import type { ParsedPoint } from '../types';
 import type { MarkdownSourceMapSegment, SourceSpan } from './types';
 
 interface RecordingState {
-  source?: string
+  source: string
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
@@ -413,9 +413,11 @@ export function recordingExtension(state: RecordingState) {
       sawOpeningLineEnding: false,
       sawContentAfterOpening: false,
       sawClosingFence: false,
-      openingIndent: state.source
-        ? indentationColumns(state.source, lineIndentStart, token.start.offset)
-        : 0,
+      openingIndent: indentationColumns(
+        state.source,
+        lineIndentStart,
+        token.start.offset,
+      ),
     };
   };
 
@@ -450,14 +452,12 @@ export function recordingExtension(state: RecordingState) {
     ) {
       const closingStart = fencedCodeRecording.closingFenceStart
         ?? token.start.offset;
-      fencedCodeRecording.emptyOffset = state.source
-        ? skipIndentationColumns(
-          state.source,
-          closingStart,
-          token.start.offset,
-          fencedCodeRecording.openingIndent,
-        )
-        : token.start.offset;
+      fencedCodeRecording.emptyOffset = skipIndentationColumns(
+        state.source,
+        closingStart,
+        token.start.offset,
+        fencedCodeRecording.openingIndent,
+      );
     }
   };
 

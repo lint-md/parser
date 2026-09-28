@@ -108,8 +108,9 @@ const SMOKE_GROWTH_CHECKS = [
 // Child mode and parity mode
 // ---------------------------------------------------------------------------
 
-function makeState() {
+function makeState(source) {
   return {
+    source,
     segments: new WeakMap(),
     inlineCodeSegments: new WeakMap(),
     codeSegments: new WeakMap(),
@@ -188,7 +189,10 @@ function phaseRunner(bundle, phase) {
     case 'B2':
       return (md) => fromMarkdown(md, {
         extensions: micromarkExtensions,
-        mdastExtensions: [...fromMarkdownExtensions, recordingExtension(makeState())],
+        mdastExtensions: [
+          ...fromMarkdownExtensions,
+          recordingExtension(makeState(md)),
+        ],
       });
     case 'C':
       return (md) => parseMdWithSourceMap(md).ast;
@@ -264,7 +268,10 @@ async function runParity() {
     }));
     const b2 = canon(fromMarkdown(md, {
       extensions: micromarkExtensions,
-      mdastExtensions: [...fromMarkdownExtensions, recordingExtension(makeState())],
+      mdastExtensions: [
+        ...fromMarkdownExtensions,
+        recordingExtension(makeState(md)),
+      ],
     }));
     const c = canon(parseMdWithSourceMap(md).ast);
     return { bytes: Buffer.byteLength(md), aEqC: a === c, bEqC: b === c, b2EqC: b2 === c };

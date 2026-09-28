@@ -37,7 +37,7 @@ const { micromarkExtensions, fromMarkdownExtensions } = getParserExtensions();
 
 interface RecordingState {
   /** Markdown source used for parser-confirmed indentation spans. */
-  source?: string
+  source: string
   /** node -> ordered, gap-free, non-overlapping segments. */
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** inlineCode node -> parser-recorded value segments. */
