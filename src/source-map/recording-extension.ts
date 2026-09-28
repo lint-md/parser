@@ -1,7 +1,7 @@
 import { decodeNamedCharacterReference } from 'decode-named-character-reference';
 import { decodeNumericCharacterReference } from 'micromark-util-decode-numeric-character-reference';
 import type { ParsedPoint } from '../types';
-import type { MarkdownSourceMapSegment, SourceSpan } from './types';
+import type { MarkdownSourceMapSegment } from './types';
 
 interface RecordingState {
   source: string
@@ -11,7 +11,6 @@ interface RecordingState {
   emptyCodeOffsets: WeakMap<object, number>
   urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   emptyUrlOffsets: WeakMap<object, number>
-  urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
 interface SegmentMetadata {
@@ -628,10 +627,6 @@ export function recordingExtension(state: RecordingState) {
       throw new Error('Missing URL source-map recording');
     }
     if (node.type === 'link' || node.type === 'definition') {
-      state.urlSourceSpans.set(node, {
-        start: token.start.offset,
-        end: token.end.offset,
-      });
       if (recording.valueLength === url.length) {
         state.urlSegments.set(node, recording.segments);
         if (url.length === 0)
@@ -645,12 +640,8 @@ export function recordingExtension(state: RecordingState) {
     if (
       (node.type === 'link' || node.type === 'definition')
       && node.url === ''
-      && !state.urlSourceSpans.has(node)
+      && !state.urlSegments.has(node)
     ) {
-      state.urlSourceSpans.set(node, {
-        start: token.start.offset + 1,
-        end: token.end.offset - 1,
-      });
       state.urlSegments.set(node, []);
       state.emptyUrlOffsets.set(node, token.start.offset + 1);
     }
@@ -665,13 +656,9 @@ export function recordingExtension(state: RecordingState) {
     if (
       node.type === 'link'
       && node.url === ''
-      && !state.urlSourceSpans.has(node)
+      && !state.urlSegments.has(node)
     ) {
       const emptyOffset = token.end.offset - 1;
-      state.urlSourceSpans.set(node, {
-        start: emptyOffset,
-        end: emptyOffset,
-      });
       state.urlSegments.set(node, []);
       state.emptyUrlOffsets.set(node, emptyOffset);
     }

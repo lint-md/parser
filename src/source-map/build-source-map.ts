@@ -22,7 +22,6 @@ import type {
   MarkdownSourceMapSegment,
   MarkdownValueSourceIndex,
   ParsedMarkdownDocument,
-  SourceSpan,
 } from './types';
 
 // Use the same parser extensions as `parseMd`.
@@ -47,8 +46,6 @@ interface RecordingState {
   urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** link / definition node -> source point for an empty URL. */
   emptyUrlOffsets: WeakMap<object, number>
-  /** link / definition node -> parser-confirmed destination content span. */
-  urlSourceSpans: WeakMap<object, SourceSpan>
 }
 
 interface TraversableNode {
@@ -341,7 +338,6 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     emptyCodeOffsets: new WeakMap(),
     urlSegments: new WeakMap(),
     emptyUrlOffsets: new WeakMap(),
-    urlSourceSpans: new WeakMap(),
   };
 
   const tree = fromMarkdown(md, {
