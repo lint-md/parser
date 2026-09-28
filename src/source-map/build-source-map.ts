@@ -36,11 +36,13 @@ import type {
 const { micromarkExtensions, fromMarkdownExtensions } = getParserExtensions();
 
 interface RecordingState {
+  /** Markdown source used for parser-confirmed indentation spans. */
+  source: string
   /** node -> ordered, gap-free, non-overlapping segments. */
   segments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** inlineCode node -> parser-recorded value segments. */
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
-  /** code node -> value segments (see buildCodeSegments). */
+  /** code node -> parser-recorded or indented-code value segments. */
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** code node -> source point for an empty value. */
   emptyCodeOffsets: WeakMap<object, number>
@@ -437,6 +439,7 @@ function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
  */
 export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
   const state: RecordingState = {
+    source: md,
     segments: new WeakMap(),
     inlineCodeSegments: new WeakMap(),
     codeSegments: new WeakMap(),
@@ -471,6 +474,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     if (
       node.type === 'code'
       && hasStringField(node, 'value')
+      && !state.codeSegments.has(node)
     ) {
       const mapping = buildCodeSegments(md, node);
       if (mapping) {
