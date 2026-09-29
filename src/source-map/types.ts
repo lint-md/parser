@@ -63,7 +63,7 @@ export interface MarkdownSourceMapSegment {
  */
 export interface FencedCodeSourceInfo {
   /**
-   * The block is delimited by an opening and a closing fence.
+   * The block uses fenced code syntax. It starts with a fence sequence.
    */
   kind: 'fenced'
   /**
@@ -77,8 +77,8 @@ export interface FencedCodeSourceInfo {
    * Insert an info string here when `node.lang` is absent.
    *
    * The point stays before a `\r` in a CRLF line ending, so an insert never
-   * splits the line ending. For an unclosed fence, the point is the end of the
-   * input.
+   * splits the line ending. If the opening fence line has no line ending, the
+   * point is the end of the input.
    */
   infoInsertPoint: ParsedPoint
 }
