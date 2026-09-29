@@ -244,12 +244,15 @@ describe('sourceMap.getCodeSourceInfo', () => {
       );
     });
 
-    test('rejects a non-code node', () => {
-      const { ast, sourceMap } = parse('```\ncode\n```');
-      const paragraph = { type: 'paragraph', children: [] };
-      ast.children.push(paragraph);
+    test('rejects an owned non-code node', () => {
+      const { ast, sourceMap } = parseMdWithSourceMap('paragraph');
+      const paragraph = ast.children[0];
+      expect(paragraph.type).toBe('paragraph');
+      // The node is owned (it came from the parse), but no code structure was
+      // recorded for it. This must reach the missing-info branch, not the
+      // ownership branch.
       expect(() => sourceMap.getCodeSourceInfo(paragraph as any)).toThrow(
-        SourceMapUnavailableError,
+        /no source structure is available/,
       );
     });
   });
