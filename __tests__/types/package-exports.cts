@@ -33,6 +33,26 @@ const urlRange = doc.sourceMap.getFieldSourceRange(
   0,
   1,
 );
+const codeNode = doc.ast.children[0] as parser.MarkdownCodeNode;
+const codeSourceInfo: parser.CodeSourceInfo =
+  doc.sourceMap.getCodeSourceInfo(codeNode);
+
+// The three new public types must stay exported.
+type ExportedCodeSourceInfo = parser.CodeSourceInfo;
+type ExportedFencedCodeSourceInfo = parser.FencedCodeSourceInfo;
+type ExportedIndentedCodeSourceInfo = parser.IndentedCodeSourceInfo;
+
+// A consumer narrows the result with `kind`.
+if (codeSourceInfo.kind === 'fenced') {
+  const fenceStart: number = codeSourceInfo.openingFence.start.offset;
+  const infoOffset: number = codeSourceInfo.infoInsertPoint.offset;
+  void fenceStart;
+  void infoOffset;
+}
+else {
+  const indentedKind: 'indented' = codeSourceInfo.kind;
+  void indentedKind;
+}
 const consistency = new parser.SourceMapConsistencyError();
 const asRangeError: RangeError = new parser.SourceMapUnavailableError();
 const isSourceMapError: boolean = consistency instanceof parser.SourceMapError;
@@ -45,6 +65,8 @@ void codeRange;
 void sourceIndex;
 void sourceOffset;
 void urlRange;
+void codeNode;
+void codeSourceInfo;
 void codeRaw;
 void consistency;
 void asRangeError;

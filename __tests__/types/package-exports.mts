@@ -7,6 +7,10 @@ import {
   SourceMapConsistencyError,
   SourceMapUnavailableError,
   type SourceMapErrorCode,
+  type CodeSourceInfo,
+  type FencedCodeSourceInfo,
+  type IndentedCodeSourceInfo,
+  type MarkdownCodeNode,
   type ParsedMarkdownDocument,
   type MarkdownLinkNode,
   type MarkdownTextNode,
@@ -37,6 +41,25 @@ const urlRange = doc.sourceMap.getFieldSourceRange(
   0,
   1,
 );
+const codeNode = doc.ast.children[0] as MarkdownCodeNode;
+const codeSourceInfo: CodeSourceInfo = doc.sourceMap.getCodeSourceInfo(codeNode);
+
+// The three new public types must stay exported.
+type ExportedCodeSourceInfo = CodeSourceInfo;
+type ExportedFencedCodeSourceInfo = FencedCodeSourceInfo;
+type ExportedIndentedCodeSourceInfo = IndentedCodeSourceInfo;
+
+// A consumer narrows the result with `kind`.
+if (codeSourceInfo.kind === 'fenced') {
+  const fenceStart: number = codeSourceInfo.openingFence.start.offset;
+  const infoOffset: number = codeSourceInfo.infoInsertPoint.offset;
+  void fenceStart;
+  void infoOffset;
+}
+else {
+  const indentedKind: 'indented' = codeSourceInfo.kind;
+  void indentedKind;
+}
 
 // @ts-expect-error segment implementation details are intentionally internal.
 type HiddenSegment = import('@lint-md/parser').MarkdownSourceMapSegment;
@@ -59,6 +82,8 @@ void doc;
 void sourceIndex;
 void sourceOffset;
 void urlRange;
+void codeNode;
+void codeSourceInfo;
 void consistency;
 void unavailable;
 void asRangeError;
