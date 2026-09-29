@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.3.2
+
+### Refactored
+
+- 在 parser handler 中记录 `inlineCode`、fenced code 和 indented code 的源码映射（#135、#136、#137）。
+- 在 parser handler 中记录 link 与 definition URL destination 的源码映射（#138）。
+- 删除 AST 生成后的 code 与 URL 二次解析逻辑，保持公开 API 和 source-map 契约不变（#135、#136、#137、#138）。
+
 ## 0.3.1
 
 ### Changed
