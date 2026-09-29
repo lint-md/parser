@@ -67,7 +67,7 @@ interface FencedCodeRecording extends CodeValueRecording {
   sawContentAfterOpening: boolean
   sawClosingFence: boolean
   openingIndent: number
-  openingFenceStart: number
+  openingFenceStart?: number
   openingFenceEnd?: number
   infoInsertPoint?: number
   closingFenceStart?: number
@@ -492,7 +492,6 @@ export function recordingExtension(state: RecordingState) {
         lineIndentStart,
         token.start.offset,
       ),
-      openingFenceStart: token.start.offset,
     };
   };
 
@@ -503,8 +502,10 @@ export function recordingExtension(state: RecordingState) {
     // The parser enters the opening fence sequence before it sets
     // `flowCodeInside`. So this is the only fence sequence seen while that flag
     // is false. The token spans the backtick or tilde run exactly.
-    if (fencedCodeRecording && !this.getData('flowCodeInside'))
+    if (fencedCodeRecording && !this.getData('flowCodeInside')) {
+      fencedCodeRecording.openingFenceStart = token.start.offset;
       fencedCodeRecording.openingFenceEnd = token.end.offset;
+    }
   };
 
   const onentercodefencedfence = function (
@@ -589,7 +590,8 @@ export function recordingExtension(state: RecordingState) {
       state.emptyCodeOffsets.set(node, recording.emptyOffset);
     }
     if (
-      recording.openingFenceEnd !== undefined
+      recording.openingFenceStart !== undefined
+      && recording.openingFenceEnd !== undefined
       && recording.infoInsertPoint !== undefined
     ) {
       state.codeSourceInfos.set(node, {
