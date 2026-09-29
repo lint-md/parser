@@ -9,9 +9,36 @@ interface RecordingState {
   inlineCodeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   emptyCodeOffsets: WeakMap<object, number>
+  codeSourceInfos: WeakMap<object, RecordedCodeSourceInfo>
   urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   emptyUrlOffsets: WeakMap<object, number>
 }
+
+/**
+ * Parser-recorded structure of a fenced `code` node. All offsets are absolute
+ * UTF-16 offsets into the original Markdown.
+ *
+ * @internal
+ */
+export interface RecordedFencedCodeSourceInfo {
+  kind: 'fenced'
+  /** Offset of the first character of the opening fence sequence. */
+  openingFenceStart: number
+  /** Offset just after the opening fence sequence. */
+  openingFenceEnd: number
+  /** Offset at the end of the opening fence line, before its line ending. */
+  infoInsertPoint: number
+}
+
+/** Parser-recorded structure of an indented `code` node. @internal */
+export interface RecordedIndentedCodeSourceInfo {
+  kind: 'indented'
+}
+
+/** @internal */
+export type RecordedCodeSourceInfo =
+  | RecordedFencedCodeSourceInfo
+  | RecordedIndentedCodeSourceInfo;
 
 interface SegmentMetadata {
   sourceStart: number
@@ -40,6 +67,9 @@ interface FencedCodeRecording extends CodeValueRecording {
   sawContentAfterOpening: boolean
   sawClosingFence: boolean
   openingIndent: number
+  openingFenceStart: number
+  openingFenceEnd?: number
+  infoInsertPoint?: number
   closingFenceStart?: number
 }
 
@@ -462,7 +492,19 @@ export function recordingExtension(state: RecordingState) {
         lineIndentStart,
         token.start.offset,
       ),
+      openingFenceStart: token.start.offset,
     };
+  };
+
+  const onentercodefencedfencesequence = function (
+    this: CompileContext,
+    token: any,
+  ) {
+    // The parser enters the opening fence sequence before it sets
+    // `flowCodeInside`. So this is the only fence sequence seen while that flag
+    // is false. The token spans the backtick or tilde run exactly.
+    if (fencedCodeRecording && !this.getData('flowCodeInside'))
+      fencedCodeRecording.openingFenceEnd = token.end.offset;
   };
 
   const onentercodefencedfence = function (
@@ -481,8 +523,14 @@ export function recordingExtension(state: RecordingState) {
     }
     this.buffer();
     this.setData('flowCodeInside', true);
-    if (fencedCodeRecording)
+    if (fencedCodeRecording) {
+      // The opening fence token spans the opening fence line. It ends before
+      // the line ending. That end is where an inserted info string belongs.
+      // Reuse it for the empty-value boundary too; a later line ending may
+      // move `emptyOffset` forward.
       fencedCodeRecording.emptyOffset = token.end.offset;
+      fencedCodeRecording.infoInsertPoint = token.end.offset;
+    }
   };
 
   const onexitcodefencedfencesequence = function (
@@ -541,6 +589,17 @@ export function recordingExtension(state: RecordingState) {
       state.emptyCodeOffsets.set(node, recording.emptyOffset);
     }
     if (
+      recording.openingFenceEnd !== undefined
+      && recording.infoInsertPoint !== undefined
+    ) {
+      state.codeSourceInfos.set(node, {
+        kind: 'fenced',
+        openingFenceStart: recording.openingFenceStart,
+        openingFenceEnd: recording.openingFenceEnd,
+        infoInsertPoint: recording.infoInsertPoint,
+      });
+    }
+    if (
       value.length === 0
       && !recording.sawOpeningLineEnding
       && !recording.sawClosingFence
@@ -583,6 +642,7 @@ export function recordingExtension(state: RecordingState) {
     );
     if (segments)
       state.codeSegments.set(node, segments);
+    state.codeSourceInfos.set(node, { kind: 'indented' });
     this.exit(token);
   };
 
@@ -668,6 +728,7 @@ export function recordingExtension(state: RecordingState) {
     enter: {
       codeFenced: onentercodefenced,
       codeFencedFence: onentercodefencedfence,
+      codeFencedFenceSequence: onentercodefencedfencesequence,
       codeIndented: onentercodeindented,
       codeFlowValue: onenterdata,
       codeText: onentercodetext,
