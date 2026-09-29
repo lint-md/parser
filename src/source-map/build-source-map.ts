@@ -17,7 +17,9 @@ import {
   SourceMapUnavailableError,
 } from './errors';
 import { recordingExtension } from './recording-extension';
+import type { RecordedCodeSourceInfo } from './recording-extension';
 import type {
+  CodeSourceInfo,
   MarkdownSourceMap,
   MarkdownSourceMapSegment,
   MarkdownValueSourceIndex,
@@ -42,6 +44,8 @@ interface RecordingState {
   codeSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** code node -> source point for an empty value. */
   emptyCodeOffsets: WeakMap<object, number>
+  /** code node -> parser-recorded fenced / indented structure. */
+  codeSourceInfos: WeakMap<object, RecordedCodeSourceInfo>
   /** link / definition node -> normalized URL segments. */
   urlSegments: WeakMap<object, MarkdownSourceMapSegment[]>
   /** link / definition node -> source point for an empty URL. */
@@ -336,6 +340,7 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     inlineCodeSegments: new WeakMap(),
     codeSegments: new WeakMap(),
     emptyCodeOffsets: new WeakMap(),
+    codeSourceInfos: new WeakMap(),
     urlSegments: new WeakMap(),
     emptyUrlOffsets: new WeakMap(),
   };
@@ -608,6 +613,35 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
         lineStarts,
         source: md,
       });
+    },
+
+    getCodeSourceInfo(node: MarkdownCodeNode): CodeSourceInfo {
+      if (!owned.has(node as object)) {
+        throw new SourceMapUnavailableError(
+          'getCodeSourceInfo: the given node does not belong to this document; '
+            + 'pass a node from the tree returned by the same '
+            + 'parseMdWithSourceMap() call',
+        );
+      }
+      const info = state.codeSourceInfos.get(node as object);
+      if (!info) {
+        throw new SourceMapUnavailableError(
+          'getCodeSourceInfo: no source structure is available for the given '
+            + 'node; it was generated, added after parsing, or is not a block '
+            + 'code node',
+        );
+      }
+      if (info.kind === 'indented')
+        return { kind: 'indented' };
+      lineStarts ??= computeLineStarts(md);
+      return {
+        kind: 'fenced',
+        openingFence: {
+          start: pointAtOffset(lineStarts, md, info.openingFenceStart),
+          end: pointAtOffset(lineStarts, md, info.openingFenceEnd),
+        },
+        infoInsertPoint: pointAtOffset(lineStarts, md, info.infoInsertPoint),
+      };
     },
 
     getFieldSourceRange(

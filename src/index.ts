@@ -9,6 +9,9 @@ export {
 
 export * from './types';
 export type {
+  CodeSourceInfo,
+  FencedCodeSourceInfo,
+  IndentedCodeSourceInfo,
   MarkdownSourceMap,
   MarkdownValueSourceIndex,
   ParsedMarkdownDocument,

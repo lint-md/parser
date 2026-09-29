@@ -20,6 +20,21 @@ import { Text as Text_2 } from 'mdast';
 
 export { Code }
 
+// @public
+export type CodeSourceInfo = FencedCodeSourceInfo | IndentedCodeSourceInfo;
+
+// @public
+export interface FencedCodeSourceInfo {
+    infoInsertPoint: ParsedPoint;
+    kind: 'fenced';
+    openingFence: ParsedPosition;
+}
+
+// @public
+export interface IndentedCodeSourceInfo {
+    kind: 'indented';
+}
+
 export { Link }
 
 export { ListItem }
@@ -85,6 +100,7 @@ export type MarkdownRoot = Root;
 
 // @public
 export interface MarkdownSourceMap {
+    getCodeSourceInfo(node: MarkdownCodeNode): CodeSourceInfo;
     getFieldSourceRange(node: MarkdownLinkNode | MarkdownDefinitionNode, field: 'url', valueStart: number, valueEnd: number): ParsedPosition;
     getRaw(node: MarkdownNode | MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode | MarkdownLinkNode | MarkdownDefinitionNode): string;
     getSourceRange(node: MarkdownTextNode | MarkdownInlineCodeNode | MarkdownCodeNode, valueStart: number, valueEnd: number): ParsedPosition;

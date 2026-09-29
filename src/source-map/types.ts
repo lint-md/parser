@@ -5,6 +5,7 @@ import type {
   MarkdownLinkNode,
   MarkdownNode,
   MarkdownTextNode,
+  ParsedPoint,
   ParsedPosition,
 } from '../types';
 
@@ -54,6 +55,53 @@ export interface MarkdownSourceMapSegment {
    */
   kind: SourceMapSegmentKind
 }
+
+/**
+ * Source structure of a fenced code block.
+ *
+ * @public
+ */
+export interface FencedCodeSourceInfo {
+  /**
+   * The block uses fenced code syntax. It starts with a fence sequence.
+   */
+  kind: 'fenced'
+  /**
+   * The opening fence sequence: the run of backticks or tildes that starts the
+   * block. It excludes the container prefix, the indentation, the info string,
+   * and the line ending.
+   */
+  openingFence: ParsedPosition
+  /**
+   * Point at the end of the opening fence line, before its line ending.
+   * Insert an info string here when `node.lang` is absent.
+   *
+   * The point stays before a `\r` in a CRLF line ending, so an insert never
+   * splits the line ending. If the opening fence line has no line ending, the
+   * point is the end of the input.
+   */
+  infoInsertPoint: ParsedPoint
+}
+
+/**
+ * Source structure of an indented code block. It has no fence and no position
+ * for an info string.
+ *
+ * @public
+ */
+export interface IndentedCodeSourceInfo {
+  /**
+   * The block is code indented by four or more columns. It has no fence.
+   */
+  kind: 'indented'
+}
+
+/**
+ * Source structure of a block `code` node: fenced or indented.
+ *
+ * @public
+ */
+export type CodeSourceInfo = FencedCodeSourceInfo | IndentedCodeSourceInfo;
 
 /**
  * Sidecar source map produced alongside a parse. Maps supported value nodes to
@@ -138,6 +186,29 @@ export interface MarkdownSourceMap {
     valueStart: number,
     valueEnd: number,
   ): ParsedPosition
+
+  /**
+   * Returns the source structure of a block `code` node. The result states
+   * whether the block is fenced or indented.
+   *
+   * For a fenced block, `openingFence` is the opening fence sequence and
+   * `infoInsertPoint` is the end of the opening fence line. Insert a language
+   * at `infoInsertPoint.offset` when `node.lang` is absent. The parser records
+   * both during parsing; a consumer does not rescan the Markdown.
+   *
+   * For an indented block, the result is `{ kind: 'indented' }`. An indented
+   * block has no info string position.
+   *
+   * Failure modes:
+   *
+   * - {@link SourceMapUnavailableError} — the node belongs to another
+   *   document, was generated or added after parsing, or is not a block `code`
+   *   node. No structure is fabricated.
+   *
+   * @param node - A block `code` node from the document this map was built for.
+   * @returns The source structure of `node`.
+   */
+  getCodeSourceInfo(node: MarkdownCodeNode): CodeSourceInfo
 
   /**
    * Maps a half-open range of a named normalized field back to the raw
