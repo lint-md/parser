@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0
+
 ### Added
 
 - 新增 `MarkdownSourceMap.getCodeSourceInfo()`。它返回 block `code` 节点的源码结构：fenced（含 `openingFence` 与 `infoInsertPoint`）或 indented。parser 在解析阶段记录该结构，consumer 不再重新扫描 Markdown（#141）。
