@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/tmp/mdx.d.ts",
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "parser-mdx.api.md",
+    "reportFolder": "<projectFolder>/etc/"
+  },
+  "dtsRollup": {
+    "enabled": true,
+    "untrimmedFilePath": "<projectFolder>/dist/lint-md-parser-mdx.d.ts"
+  }
+}

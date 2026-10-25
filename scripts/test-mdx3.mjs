@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { compile } from '@mdx-js/mdx';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import { parseMdx, parseMdxWithSourceMap } from '../dist/lint-md-parser.mjs';
+import { parseMdx, parseMdxWithSourceMap } from '../dist/lint-md-parser-mdx.mjs';
 
 const source = [
   'export const 用户ID = 42',

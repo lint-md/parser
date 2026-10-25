@@ -154,12 +154,6 @@ export interface ParsedMarkdownDocument {
 }
 
 // @public
-export interface ParsedMdxDocument {
-    ast: PositionedMdxRoot;
-    sourceMap: MarkdownSourceMap;
-}
-
-// @public
 export interface ParsedPoint {
     column: number;
     line: number;
@@ -177,12 +171,6 @@ export const parseMd: (md: string) => PositionedMarkdownRoot;
 
 // @public
 export const parseMdWithSourceMap: (md: string) => ParsedMarkdownDocument;
-
-// @public
-export const parseMdx: (mdx: string) => PositionedMdxRoot;
-
-// @public
-export const parseMdxWithSourceMap: (mdx: string) => ParsedMdxDocument;
 
 // @public
 export type Positioned<T> = T extends {

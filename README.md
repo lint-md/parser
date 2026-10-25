@@ -19,9 +19,11 @@ const ast = parseMd('你的 Markdown 文本');
 ### MDX input
 
 Use `parseMdx` for MDX files. It keeps ESM, JSX, and JavaScript expressions in separate nodes.
+The MDX entry loads `remark-mdx` when the caller imports `@lint-md/parser/mdx`.
+The default entry supports Markdown without loading the MDX parser.
 
 ```ts
-import { parseMdx, parseMdxWithSourceMap } from '@lint-md/parser';
+import { parseMdx, parseMdxWithSourceMap } from '@lint-md/parser/mdx';
 
 const input = 'export const x = 1\n\n<Card title="Keep  spaces">Fix  text</Card>';
 const ast = parseMdx(input);

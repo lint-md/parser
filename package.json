@@ -28,6 +28,16 @@
         "types": "./dist/lint-md-parser.d.cts",
         "default": "./dist/lint-md-parser.cjs"
       }
+    },
+    "./mdx": {
+      "import": {
+        "types": "./dist/lint-md-parser-mdx.d.mts",
+        "default": "./dist/lint-md-parser-mdx.mjs"
+      },
+      "require": {
+        "types": "./dist/lint-md-parser-mdx.d.cts",
+        "default": "./dist/lint-md-parser-mdx.cjs"
+      }
     }
   },
   "files": [
@@ -36,15 +46,21 @@
     "dist/lint-md-parser.d.ts",
     "dist/lint-md-parser.d.cts",
     "dist/lint-md-parser.d.mts",
+    "dist/lint-md-parser-mdx.cjs",
+    "dist/lint-md-parser-mdx.mjs",
+    "dist/lint-md-parser-mdx.d.ts",
+    "dist/lint-md-parser-mdx.d.cts",
+    "dist/lint-md-parser-mdx.d.mts",
     "dist/tsdoc-metadata.json"
   ],
   "scripts": {
     "watch": "tsc -w",
     "build": "rm -rf dist && pnpm run build:dist && pnpm run build:ts-declaration",
-    "build:dist": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/lint-md-parser.cjs --minify && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser.mjs --minify",
-    "build:ts-declaration": "tsc && api-extractor run --local --verbose && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.mts && for f in dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts dist/lint-md-parser.d.mts; do cat scripts/mdast-augment.d.ts >> \"$f\"; done",
+    "build:dist": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/lint-md-parser.cjs --minify && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser.mjs --minify && esbuild src/mdx.ts --bundle --platform=node --format=cjs --outfile=dist/lint-md-parser-mdx.cjs --minify && esbuild src/mdx.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser-mdx.mjs --minify",
+    "build:ts-declaration": "tsc && api-extractor run --local --verbose && api-extractor run --local --verbose --config api-extractor.mdx.json && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.mts && cp dist/lint-md-parser-mdx.d.ts dist/lint-md-parser-mdx.d.cts && cp dist/lint-md-parser-mdx.d.ts dist/lint-md-parser-mdx.d.mts && for f in dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts dist/lint-md-parser.d.mts dist/lint-md-parser-mdx.d.ts dist/lint-md-parser-mdx.d.cts dist/lint-md-parser-mdx.d.mts; do cat scripts/mdast-augment.d.ts >> \"$f\"; done",
     "lint": "eslint --ext js,jsx,ts,tsx ./src",
-    "test": "jest && pnpm run test:types && pnpm run test:package && pnpm run test:mdx3",
+    "test": "jest && pnpm run test:types && pnpm run test:package && pnpm run test:mdx3 && pnpm run test:bench-entry",
+    "test:bench-entry": "node scripts/test-bench-markdown-versions.mjs",
     "test:mdx3": "node scripts/test-mdx3.mjs",
     "test:types": "tsc -p __tests__/types/tsconfig.json",
     "test:package": "publint && node scripts/test-package.mjs",

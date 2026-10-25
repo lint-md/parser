@@ -1,5 +1,5 @@
-export { parseMd, parseMdx, revertMdAstNode, revertMdAstNode as stringifyMdAst } from './parse-md';
-export { parseMdWithSourceMap, parseMdxWithSourceMap } from './source-map/build-source-map';
+export { parseMd, revertMdAstNode, revertMdAstNode as stringifyMdAst } from './parse-md';
+export { parseMdWithSourceMap } from './source-map/build-source-map';
 export {
   SourceMapError,
   SourceMapConsistencyError,
@@ -15,5 +15,4 @@ export type {
   MarkdownSourceMap,
   MarkdownValueSourceIndex,
   ParsedMarkdownDocument,
-  ParsedMdxDocument,
 } from './source-map/types';

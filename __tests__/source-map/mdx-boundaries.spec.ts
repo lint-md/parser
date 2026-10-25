@@ -1,7 +1,7 @@
 import {
   parseMdx,
   parseMdxWithSourceMap,
-  SourceMapUnavailableError,
+  MdxSourceMapUnavailableError,
 } from '../helpers';
 
 const nested = [
@@ -85,14 +85,14 @@ describe('MDX source-map boundaries', () => {
     const expression = at<any>(trailing.children, 'mdxTextExpression');
 
     for (const unsupported of [jsx.attributes[0], jsx.attributes[1], expressionAttribute]) {
-      expect(() => sourceMap.getRaw(unsupported)).toThrow(SourceMapUnavailableError);
+      expect(() => sourceMap.getRaw(unsupported)).toThrow(MdxSourceMapUnavailableError);
       expect(() => sourceMap.getValueSourceIndex(unsupported))
-        .toThrow(SourceMapUnavailableError);
+        .toThrow(MdxSourceMapUnavailableError);
     }
     expect(() => sourceMap.getValueSourceIndex(expression))
-      .toThrow(SourceMapUnavailableError);
+      .toThrow(MdxSourceMapUnavailableError);
     expect(() => sourceMap.getSourceRange(expression, 0, 1))
-      .toThrow(SourceMapUnavailableError);
+      .toThrow(MdxSourceMapUnavailableError);
 
     const spaces = sourceMap.getSourceRange(text, 2, 4);
     expect(mixed.slice(spaces.start.offset, spaces.end.offset)).toBe('  ');

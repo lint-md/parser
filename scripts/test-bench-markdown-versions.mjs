@@ -30,3 +30,30 @@ for (const version of ['baseline', 'current']) {
   }
 }
 console.log('Markdown comparison smoke test passed.');
+
+const mdxChild = spawnSync(process.execPath, [
+  script,
+  '--baseline', root,
+  '--current', root,
+  '--runs', '1',
+  '--bytes', '1024',
+  '--mode', 'mdx',
+  '--baseline-entry', 'mdx',
+  '--preload-default',
+], { encoding: 'utf8' });
+
+assert.equal(mdxChild.status, 0, mdxChild.stderr);
+const mdxResult = JSON.parse(mdxChild.stdout);
+assert.equal(mdxResult.mode, 'mdx');
+assert.equal(mdxResult.preloadDefault, true);
+for (const version of ['baseline', 'current']) {
+  assert.ok(mdxResult.summary[version].cjsGzipBytes > 0);
+  for (const format of ['cjs', 'esm']) {
+    for (const name of ['parseMdx', 'parseMdxWithSourceMap']) {
+      const sample = mdxResult.summary[version][`${format}/${name}`];
+      assert.ok(sample.coldTotalMs > 0);
+      assert.ok(sample.rssBytes > 0);
+    }
+  }
+}
+console.log('MDX comparison smoke test passed.');
