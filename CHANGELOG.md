@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+### Added
+
+- 新增 `@lint-md/parser/mdx` 入口，提供 `parseMdx()`、`parseMdxWithSourceMap()` 和 MDX 节点类型（#145、#149）。
+- 保留 MDX JSX 与表达式节点，并为其中的 Markdown 文本提供源码映射（#145）。
+
+### Changed
+
+- 默认入口仅加载 Markdown 解析器。MDX 用户需改用 `@lint-md/parser/mdx`（#149）。
+- 分别构建两个入口的 CJS、ESM 和类型声明（#149）。
+
+### Tests
+
+- 覆盖 MDX 源码映射边界、语法保留和编辑后的原始字节（#146）。
+- 新增普通 Markdown 解析性能对比和回归检查（#148）。
 
 ## 0.4.0
 
