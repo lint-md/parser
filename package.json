@@ -76,10 +76,12 @@
     "remark-frontmatter": "^4.0.1",
     "remark-gfm": "^3.0.1",
     "remark-math": "^5.1.1",
+    "remark-mdx": "2.3.0",
     "ts-jest": "^29.4.0",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@types/mdast": "^3.0.15"
+    "@types/mdast": "^3.0.15",
+    "mdast-util-mdx": "2.0.1"
   }
 }

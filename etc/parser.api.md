@@ -13,6 +13,14 @@ import { InlineCode } from 'mdast';
 import { Link } from 'mdast';
 import { ListItem } from 'mdast';
 import type { Literal } from 'mdast';
+import type { MdxFlowExpression } from 'mdast-util-mdx';
+import type { MdxjsEsm } from 'mdast-util-mdx';
+import type { MdxJsxAttribute } from 'mdast-util-mdx';
+import type { MdxJsxAttributeValueExpression } from 'mdast-util-mdx';
+import type { MdxJsxExpressionAttribute } from 'mdast-util-mdx';
+import type { MdxJsxFlowElement } from 'mdast-util-mdx';
+import type { MdxJsxTextElement } from 'mdast-util-mdx';
+import type { MdxTextExpression } from 'mdast-util-mdx';
 import type { Parent } from 'mdast';
 import type { PhrasingContent } from 'mdast';
 import type { Root } from 'mdast';
@@ -123,9 +131,31 @@ export interface MarkdownValueSourceIndex {
     sourceOffsetAt(valueIndex: number): number;
 }
 
+export { MdxFlowExpression }
+
+export { MdxjsEsm }
+
+export { MdxJsxAttribute }
+
+export { MdxJsxAttributeValueExpression }
+
+export { MdxJsxExpressionAttribute }
+
+export { MdxJsxFlowElement }
+
+export { MdxJsxTextElement }
+
+export { MdxTextExpression }
+
 // @public
 export interface ParsedMarkdownDocument {
     ast: PositionedMarkdownRoot;
+    sourceMap: MarkdownSourceMap;
+}
+
+// @public
+export interface ParsedMdxDocument {
+    ast: PositionedMdxRoot;
     sourceMap: MarkdownSourceMap;
 }
 
@@ -149,6 +179,12 @@ export const parseMd: (md: string) => PositionedMarkdownRoot;
 export const parseMdWithSourceMap: (md: string) => ParsedMarkdownDocument;
 
 // @public
+export const parseMdx: (mdx: string) => PositionedMdxRoot;
+
+// @public
+export const parseMdxWithSourceMap: (mdx: string) => ParsedMdxDocument;
+
+// @public
 export type Positioned<T> = T extends {
     children: Array<infer Child>;
 } ? Omit<T, 'position' | 'children'> & {
@@ -163,6 +199,9 @@ export type PositionedMarkdownNode = Positioned<MarkdownNode>;
 
 // @public
 export type PositionedMarkdownRoot = Positioned<MarkdownRoot>;
+
+// @public
+export type PositionedMdxRoot = Positioned<MarkdownRoot>;
 
 // @public
 const revertMdAstNode: (node: MarkdownRoot) => string;

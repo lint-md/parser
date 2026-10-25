@@ -40,7 +40,7 @@ try {
       'utf8',
     ),
   );
-  assert.deepEqual(Object.keys(installedManifest.dependencies), ['@types/mdast']);
+  assert.deepEqual(Object.keys(installedManifest.dependencies), ['@types/mdast', 'mdast-util-mdx']);
 
   const cjsResult = run('node', [
     '-e',
@@ -60,6 +60,13 @@ try {
     "import { parseMd } from '@lint-md/parser'; process.stdout.write(parseMd('# ESM').type)",
   ]);
   assert.equal(esmResult, 'root');
+
+  const mdxResult = run('node', [
+    '--input-type=module',
+    '-e',
+    "import { parseMdx, parseMdxWithSourceMap } from '@lint-md/parser'; const input = '<Card title=\"A  B\" />'; process.stdout.write([parseMdx(input).children[0].type, parseMdxWithSourceMap(input).ast.children[0].type].join(','))",
+  ]);
+  assert.equal(mdxResult, 'mdxJsxFlowElement,mdxJsxFlowElement');
 
   const esmStringifyResult = run('node', [
     '--input-type=module',
@@ -100,7 +107,7 @@ try {
       '  MarkdownRoot,',
       '  MarkdownTextDirective,',
       "} from '@lint-md/parser';",
-      "import { parseMd, revertMdAstNode, stringifyMdAst } from '@lint-md/parser';",
+      "import { parseMd, parseMdx, revertMdAstNode, stringifyMdAst } from '@lint-md/parser';",
       '',
       'const markdown: string = revertMdAstNode(parseMd("# ESM"));',
       'const same: boolean = stringifyMdAst === revertMdAstNode;',
@@ -110,6 +117,10 @@ try {
       'function assertType<T>(_val: T): void {}',
       '',
       'const root = parseMd("# test");',
+      'const mdxRoot = parseMdx("<Card title=\\"A  B\\" />");',
+      'for (const child of mdxRoot.children) {',
+      '  if (child.type === "mdxjsEsm") assertType<string>(child.value);',
+      '}',
       '',
       'for (const child of root.children) {',
       '  if (child.type === "yaml") {',

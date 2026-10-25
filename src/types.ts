@@ -7,6 +7,27 @@ import type {
   PhrasingContent,
   Root,
 } from 'mdast';
+import type {
+  MdxFlowExpression,
+  MdxJsxAttribute,
+  MdxJsxAttributeValueExpression,
+  MdxJsxExpressionAttribute,
+  MdxJsxFlowElement,
+  MdxJsxTextElement,
+  MdxTextExpression,
+  MdxjsEsm,
+} from 'mdast-util-mdx';
+
+export type {
+  MdxFlowExpression,
+  MdxJsxAttribute,
+  MdxJsxAttributeValueExpression,
+  MdxJsxExpressionAttribute,
+  MdxJsxFlowElement,
+  MdxJsxTextElement,
+  MdxTextExpression,
+  MdxjsEsm,
+};
 
 export type { Code, Link, ListItem, Text } from 'mdast';
 
@@ -118,6 +139,9 @@ export type MarkdownInlineCodeNode = import('mdast').InlineCode;
  * @public
  */
 export type PositionedMarkdownRoot = Positioned<MarkdownRoot>;
+
+/** The MDX root includes ESM, JSX, expressions, and Markdown nodes. @public */
+export type PositionedMdxRoot = Positioned<MarkdownRoot>;
 
 /**
  * Any AST node returned by `parseMd`, with non-optional `position`

@@ -24,6 +24,7 @@ import type {
   MarkdownSourceMapSegment,
   MarkdownValueSourceIndex,
   ParsedMarkdownDocument,
+  ParsedMdxDocument,
 } from './types';
 
 // Use the same parser extensions as `parseMd`.
@@ -31,7 +32,8 @@ import type {
 // Only replace the mdast handlers needed to record mapped values.
 // The replacements mirror the matching `mdast-util-from-markdown` AST behavior.
 // All other tokens use the standard handlers.
-const { micromarkExtensions, fromMarkdownExtensions } = getParserExtensions();
+const markdownExtensions = getParserExtensions();
+const mdxExtensions = getParserExtensions('mdx');
 
 interface RecordingState {
   /** Markdown source used for parser-confirmed indentation spans. */
@@ -333,7 +335,10 @@ function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
  *
  * @public
  */
-export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
+const parseWithSourceMap = (
+  md: string,
+  syntax: 'markdown' | 'mdx',
+): ParsedMarkdownDocument => {
   const state: RecordingState = {
     source: md,
     segments: new WeakMap(),
@@ -345,6 +350,9 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
     emptyUrlOffsets: new WeakMap(),
   };
 
+  const { micromarkExtensions, fromMarkdownExtensions } = syntax === 'mdx'
+    ? mdxExtensions
+    : markdownExtensions;
   const tree = fromMarkdown(md, {
     extensions: micromarkExtensions as any,
     mdastExtensions: [
@@ -694,3 +702,11 @@ export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument => {
 
   return { ast, sourceMap };
 };
+
+/** Parse Markdown and map supported values to source positions. @public */
+export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument =>
+  parseWithSourceMap(md, 'markdown');
+
+/** Parse MDX and map Markdown values to source positions. @public */
+export const parseMdxWithSourceMap = (mdx: string): ParsedMdxDocument =>
+  parseWithSourceMap(mdx, 'mdx');
