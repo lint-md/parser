@@ -48,6 +48,12 @@ try {
   ]);
   assert.equal(cjsResult, 'root');
 
+  const defaultMdxResult = run('node', [
+    '-e',
+    "const parser = require('@lint-md/parser'); process.stdout.write(String(parser.parseMdx))",
+  ]);
+  assert.equal(defaultMdxResult, 'undefined');
+
   const cjsStringifyResult = run('node', [
     '-e',
     "const parser = require('@lint-md/parser'); process.stdout.write(String(parser.stringifyMdAst === parser.revertMdAstNode))",
@@ -64,9 +70,15 @@ try {
   const mdxResult = run('node', [
     '--input-type=module',
     '-e',
-    "import { parseMdx, parseMdxWithSourceMap } from '@lint-md/parser'; const input = '<Card title=\"A  B\" />'; process.stdout.write([parseMdx(input).children[0].type, parseMdxWithSourceMap(input).ast.children[0].type].join(','))",
+    "import { parseMdx, parseMdxWithSourceMap } from '@lint-md/parser/mdx'; const input = '<Card title=\"A  B\" />'; process.stdout.write([parseMdx(input).children[0].type, parseMdxWithSourceMap(input).ast.children[0].type].join(','))",
   ]);
   assert.equal(mdxResult, 'mdxJsxFlowElement,mdxJsxFlowElement');
+
+  const cjsMdxResult = run('node', [
+    '-e',
+    "const parser = require('@lint-md/parser/mdx'); const input = '<Card title=\"Keep\" />'; const doc = parser.parseMdxWithSourceMap(input); let code = ''; try { doc.sourceMap.getRaw(doc.ast.children[0].attributes[0]); } catch (error) { code = error.code; } process.stdout.write([parser.parseMdx(input).children[0].type, code].join(','))",
+  ]);
+  assert.equal(cjsMdxResult, 'mdxJsxFlowElement,ERR_SOURCE_MAP_UNAVAILABLE');
 
   const esmStringifyResult = run('node', [
     '--input-type=module',
@@ -107,7 +119,8 @@ try {
       '  MarkdownRoot,',
       '  MarkdownTextDirective,',
       "} from '@lint-md/parser';",
-      "import { parseMd, parseMdx, revertMdAstNode, stringifyMdAst } from '@lint-md/parser';",
+      "import { parseMd, revertMdAstNode, stringifyMdAst } from '@lint-md/parser';",
+      "import { parseMdx } from '@lint-md/parser/mdx';",
       '',
       'const markdown: string = revertMdAstNode(parseMd("# ESM"));',
       'const same: boolean = stringifyMdAst === revertMdAstNode;',
@@ -196,6 +209,7 @@ try {
       '  MarkdownTextDirective,',
       "} from '@lint-md/parser';",
       "import parser = require('@lint-md/parser');",
+      "import mdx = require('@lint-md/parser/mdx');",
       '',
       'const markdown: string = parser.revertMdAstNode(parser.parseMd("# CJS"));',
       'const same: boolean = parser.stringifyMdAst === parser.revertMdAstNode;',
@@ -205,6 +219,8 @@ try {
       'function assertType<T>(_val: T): void {}',
       '',
       'const root = parser.parseMd("# test");',
+      'const mdxRoot = mdx.parseMdx("<Card />");',
+      'void mdxRoot;',
       '',
       'for (const child of root.children) {',
       '  if (child.type === "yaml") {',

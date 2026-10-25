@@ -2,7 +2,7 @@ import {
   parseMd,
   parseMdx,
   parseMdxWithSourceMap,
-  SourceMapUnavailableError,
+  MdxSourceMapUnavailableError,
 } from './helpers';
 
 const source = [
@@ -79,7 +79,7 @@ describe('MDX parsing', () => {
     expect(sourceMap.getRaw(jsx)).toBe(
       '<Card title="Keep  spaces" count={1 + 2}>Fix  body</Card>',
     );
-    expect(() => sourceMap.getRaw(jsx.attributes[0])).toThrow(SourceMapUnavailableError);
+    expect(() => sourceMap.getRaw(jsx.attributes[0])).toThrow(MdxSourceMapUnavailableError);
   });
 
   test('keeps flow JSX and flow expressions outside Markdown text maps', () => {
@@ -104,6 +104,6 @@ describe('MDX parsing', () => {
     visit(ast, node => { if (node.type === 'text') textNodes.push(node); });
     expect(textNodes.map(node => node.value)).toEqual(['Fix  body']);
     expect(sourceMap.getRaw(textNodes[0])).toBe('Fix  body');
-    expect(() => sourceMap.getValueSourceIndex(expression)).toThrow(SourceMapUnavailableError);
+    expect(() => sourceMap.getValueSourceIndex(expression)).toThrow(MdxSourceMapUnavailableError);
   });
 });

@@ -11,7 +11,7 @@ import type {
   ParsedPosition,
   PositionedMarkdownRoot,
 } from '../types';
-import { getParserExtensions } from '../remark-config';
+import { type ParserExtensions, getParserExtensions } from '../remark-config';
 import {
   SourceMapConsistencyError,
   SourceMapUnavailableError,
@@ -24,7 +24,6 @@ import type {
   MarkdownSourceMapSegment,
   MarkdownValueSourceIndex,
   ParsedMarkdownDocument,
-  ParsedMdxDocument,
 } from './types';
 
 // Use the same parser extensions as `parseMd`.
@@ -33,7 +32,6 @@ import type {
 // The replacements mirror the matching `mdast-util-from-markdown` AST behavior.
 // All other tokens use the standard handlers.
 const markdownExtensions = getParserExtensions();
-const mdxExtensions = getParserExtensions('mdx');
 
 interface RecordingState {
   /** Markdown source used for parser-confirmed indentation spans. */
@@ -335,9 +333,9 @@ function resolveSegmentRange(options: SegmentRangeOptions): ParsedPosition {
  *
  * @public
  */
-const parseWithSourceMap = (
+export const parseWithSourceMap = (
   md: string,
-  syntax: 'markdown' | 'mdx',
+  { micromarkExtensions, fromMarkdownExtensions }: ParserExtensions,
 ): ParsedMarkdownDocument => {
   const state: RecordingState = {
     source: md,
@@ -350,9 +348,6 @@ const parseWithSourceMap = (
     emptyUrlOffsets: new WeakMap(),
   };
 
-  const { micromarkExtensions, fromMarkdownExtensions } = syntax === 'mdx'
-    ? mdxExtensions
-    : markdownExtensions;
   const tree = fromMarkdown(md, {
     extensions: micromarkExtensions as any,
     mdastExtensions: [
@@ -705,8 +700,4 @@ const parseWithSourceMap = (
 
 /** Parse Markdown and map supported values to source positions. @public */
 export const parseMdWithSourceMap = (md: string): ParsedMarkdownDocument =>
-  parseWithSourceMap(md, 'markdown');
-
-/** Parse MDX and map Markdown values to source positions. @public */
-export const parseMdxWithSourceMap = (mdx: string): ParsedMdxDocument =>
-  parseWithSourceMap(mdx, 'mdx');
+  parseWithSourceMap(md, markdownExtensions);

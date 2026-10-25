@@ -1,8 +1,6 @@
 import {
   parseMd,
-  parseMdx,
   parseMdWithSourceMap,
-  parseMdxWithSourceMap,
   revertMdAstNode,
   stringifyMdAst,
   SourceMapError,
@@ -14,14 +12,18 @@ import {
   type IndentedCodeSourceInfo,
   type MarkdownCodeNode,
   type ParsedMarkdownDocument,
-  type ParsedMdxDocument,
-  type PositionedMdxRoot,
   type MarkdownLinkNode,
   type MarkdownTextNode,
   type MarkdownValueSourceIndex,
   type PositionedMarkdownRoot,
   type PositionedMarkdownNode,
 } from '@lint-md/parser';
+import {
+  parseMdx,
+  parseMdxWithSourceMap,
+  type ParsedMdxDocument,
+  type PositionedMdxRoot,
+} from '@lint-md/parser/mdx';
 
 const root = parseMd('# ESM');
 

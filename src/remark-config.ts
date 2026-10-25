@@ -3,7 +3,6 @@ import remarkGfm from 'remark-gfm';
 import remarkDirective from 'remark-directive';
 import remarkMath from 'remark-math';
 import { remark } from 'remark';
-import remarkMdx from 'remark-mdx';
 import { gfmAutolinkLiteralFromMarkdown } from 'mdast-util-gfm-autolink-literal';
 
 /**
@@ -87,18 +86,13 @@ const positionSafeGfm = function positionSafeGfm(this: {
  * Each call returns an independent processor whose own data holds a fresh
  * clone of the autolink extension — no shared mutable state between calls.
  */
-export type ParserSyntax = 'markdown' | 'mdx';
-
-export const createParserProcessor = (syntax: ParserSyntax = 'markdown'): ReturnType<typeof remark> => {
-  const processor = remark()
+export const createParserProcessor = (): ReturnType<typeof remark> =>
+  remark()
     .use(frontmatter)
     .use(remarkGfm)
     .use(positionSafeGfm)
     .use(remarkDirective)
     .use(remarkMath);
-  // The MDX 3 test dependency exposes unified 11 types. remark-mdx 2 uses unified 10 at runtime.
-  return syntax === 'mdx' ? processor.use(remarkMdx as any) : processor;
-};
 
 export interface ParserExtensions {
   micromarkExtensions: unknown[]
@@ -112,8 +106,9 @@ export interface ParserExtensions {
  * kept literal). Reusing this frozen data is what keeps
  * `parseMdWithSourceMap`'s AST identical to `parseMd`'s.
  */
-export const getParserExtensions = (syntax: ParserSyntax = 'markdown'): ParserExtensions => {
-  const frozen = createParserProcessor(syntax);
+export const getProcessorExtensions = (
+  frozen: ReturnType<typeof remark>,
+): ParserExtensions => {
   frozen.freeze();
   const data = frozen.data();
   return {
@@ -121,3 +116,6 @@ export const getParserExtensions = (syntax: ParserSyntax = 'markdown'): ParserEx
     fromMarkdownExtensions: (data.fromMarkdownExtensions as unknown[]) || [],
   };
 };
+
+export const getParserExtensions = (): ParserExtensions =>
+  getProcessorExtensions(createParserProcessor());
