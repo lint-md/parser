@@ -96,7 +96,8 @@ export const createParserProcessor = (syntax: ParserSyntax = 'markdown'): Return
     .use(positionSafeGfm)
     .use(remarkDirective)
     .use(remarkMath);
-  return syntax === 'mdx' ? processor.use(remarkMdx) : processor;
+  // The MDX 3 test dependency exposes unified 11 types. remark-mdx 2 uses unified 10 at runtime.
+  return syntax === 'mdx' ? processor.use(remarkMdx as any) : processor;
 };
 
 export interface ParserExtensions {

@@ -124,6 +124,7 @@ sourceMap.getRaw(textNode); // 'A&amp;B'
 ```bash
 pnpm run build
 pnpm run test:package
+pnpm run test:mdx3
 ```
 
 `test:package` 会打包并安装实际 tarball，然后验证 CommonJS、ESModule 和 TypeScript 类型入口。
