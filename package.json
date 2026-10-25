@@ -44,7 +44,8 @@
     "build:dist": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/lint-md-parser.cjs --minify && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/lint-md-parser.mjs --minify",
     "build:ts-declaration": "tsc && api-extractor run --local --verbose && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts && cp dist/lint-md-parser.d.ts dist/lint-md-parser.d.mts && for f in dist/lint-md-parser.d.ts dist/lint-md-parser.d.cts dist/lint-md-parser.d.mts; do cat scripts/mdast-augment.d.ts >> \"$f\"; done",
     "lint": "eslint --ext js,jsx,ts,tsx ./src",
-    "test": "jest && pnpm run test:types && pnpm run test:package",
+    "test": "jest && pnpm run test:types && pnpm run test:package && pnpm run test:mdx3",
+    "test:mdx3": "node scripts/test-mdx3.mjs",
     "test:types": "tsc -p __tests__/types/tsconfig.json",
     "test:package": "publint && node scripts/test-package.mjs",
     "prebench:source-map": "pnpm run build",
@@ -57,6 +58,7 @@
   },
   "devDependencies": {
     "@attachments/eslint-config": "^0.3.3",
+    "@mdx-js/mdx": "3.1.1",
     "@microsoft/api-extractor": "^7.23.2",
     "@types/jest": "^29.5.0",
     "@types/node": "^22.0.0",
@@ -76,10 +78,12 @@
     "remark-frontmatter": "^4.0.1",
     "remark-gfm": "^3.0.1",
     "remark-math": "^5.1.1",
+    "remark-mdx": "2.3.0",
     "ts-jest": "^29.4.0",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@types/mdast": "^3.0.15"
+    "@types/mdast": "^3.0.15",
+    "mdast-util-mdx": "2.0.1"
   }
 }

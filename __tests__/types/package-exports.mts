@@ -1,6 +1,8 @@
 import {
   parseMd,
+  parseMdx,
   parseMdWithSourceMap,
+  parseMdxWithSourceMap,
   revertMdAstNode,
   stringifyMdAst,
   SourceMapError,
@@ -12,6 +14,8 @@ import {
   type IndentedCodeSourceInfo,
   type MarkdownCodeNode,
   type ParsedMarkdownDocument,
+  type ParsedMdxDocument,
+  type PositionedMdxRoot,
   type MarkdownLinkNode,
   type MarkdownTextNode,
   type MarkdownValueSourceIndex,
@@ -23,6 +27,8 @@ const root = parseMd('# ESM');
 
 const rootOffset: number = root.position.start.offset;
 const typedRoot: PositionedMarkdownRoot = root;
+const mdxRoot: PositionedMdxRoot = parseMdx('<Card title="Keep  spaces" />');
+const mdxDoc: ParsedMdxDocument = parseMdxWithSourceMap('{1 + 2}');
 
 const firstNode: PositionedMarkdownNode = root.children[0];
 const nodeOffset: number = firstNode.position.end.offset;
@@ -74,6 +80,8 @@ const isSourceMapError: boolean = unavailable instanceof SourceMapError;
 
 void rootOffset;
 void typedRoot;
+void mdxRoot;
+void mdxDoc;
 void firstNode;
 void nodeOffset;
 void markdown;

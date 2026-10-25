@@ -258,3 +258,11 @@ export interface ParsedMarkdownDocument {
   /** Sidecar source map for resolving supported value ranges to raw source. */
   sourceMap: MarkdownSourceMap
 }
+
+/** Result of {@link parseMdxWithSourceMap}. @public */
+export interface ParsedMdxDocument {
+  /** The positioned MDX AST. */
+  ast: import('../types').PositionedMdxRoot
+  /** Source map for supported Markdown fields. */
+  sourceMap: MarkdownSourceMap
+}

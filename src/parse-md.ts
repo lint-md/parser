@@ -1,7 +1,8 @@
 import { createParserProcessor } from './remark-config';
-import type { MarkdownRoot, PositionedMarkdownRoot } from './types';
+import type { MarkdownRoot, PositionedMarkdownRoot, PositionedMdxRoot } from './types';
 
 const depsLink = createParserProcessor();
+const mdxProcessor = createParserProcessor('mdx');
 
 /**
  * 将 Markdown 解析成 ast
@@ -30,6 +31,15 @@ export const parseMd = (md: string): PositionedMarkdownRoot => {
   //    before this cast can silently propagate to downstream code.
   return depsLink.parse(md) as PositionedMarkdownRoot;
 };
+
+/**
+ * Parse MDX into positioned Markdown and MDX syntax nodes.
+ * Use this function for MDX input so JSX and expressions stay distinct.
+ *
+ * @public
+ */
+export const parseMdx = (mdx: string): PositionedMdxRoot =>
+  mdxProcessor.parse(mdx) as PositionedMdxRoot;
 
 /**
  * 将 ast 解析成 markdown

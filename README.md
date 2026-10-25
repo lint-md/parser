@@ -16,6 +16,24 @@ import { parseMd } from '@lint-md/parser';
 const ast = parseMd('你的 Markdown 文本');
 ```
 
+### MDX input
+
+Use `parseMdx` for MDX files. It keeps ESM, JSX, and JavaScript expressions in separate nodes.
+
+```ts
+import { parseMdx, parseMdxWithSourceMap } from '@lint-md/parser';
+
+const input = 'export const x = 1\n\n<Card title="Keep  spaces">Fix  text</Card>';
+const ast = parseMdx(input);
+const { sourceMap } = parseMdxWithSourceMap(input);
+```
+
+The parser maps Markdown `text`, `inlineCode`, `code`, and link URL fields.
+It does not map JSX attribute values or JavaScript expression values.
+JSX attribute nodes have no source position in the MDX AST.
+Use the JSX element position to read its full source with `sourceMap.getRaw(element)`.
+Apply fixes only to mapped Markdown fields. Keep ESM, JSX attributes, and expressions unchanged.
+
 ### 序列化说明
 
 `revertMdAstNode` 会将 AST 序列化为 Markdown，但 **不保证恢复原始文本**。
@@ -106,6 +124,7 @@ sourceMap.getRaw(textNode); // 'A&amp;B'
 ```bash
 pnpm run build
 pnpm run test:package
+pnpm run test:mdx3
 ```
 
 `test:package` 会打包并安装实际 tarball，然后验证 CommonJS、ESModule 和 TypeScript 类型入口。
