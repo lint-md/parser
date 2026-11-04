@@ -7,8 +7,26 @@
     "hustcc <i@hust.cc>",
     "yuzhanglong <loveyzl1123@gmail.com>"
   ],
-  "homepage": "https://github.com/lint-md",
+  "homepage": "https://github.com/lint-md/parser#readme",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lint-md/parser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lint-md/parser/issues"
+  },
+  "keywords": [
+    "markdown",
+    "parser",
+    "remark",
+    "mdast",
+    "mdx",
+    "lint-md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "commonjs",
   "sideEffects": false,
   "packageManager": "pnpm@11.27.1",
@@ -41,6 +59,7 @@
     }
   },
   "files": [
+    "LICENSE",
     "dist/lint-md-parser.cjs",
     "dist/lint-md-parser.mjs",
     "dist/lint-md-parser.d.ts",
