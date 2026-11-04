@@ -70,7 +70,7 @@
     "bench:parse": "node scripts/bench-parse.mjs",
     "preprofile:source-map": "pnpm run build",
     "profile:source-map": "node --expose-gc scripts/profile-source-map-heap.mjs",
-    "test:update": "jest --updateSnapshot",
+    "test:update": "pnpm run build && jest --updateSnapshot",
     "prepublishOnly": "pnpm run lint && pnpm run build && pnpm run test:built"
   },
   "devDependencies": {
