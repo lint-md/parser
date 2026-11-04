@@ -30,6 +30,24 @@ describe('TypeScript source entry points', () => {
     expect(ast.children[0].type).toBe('heading');
   });
 
+  test('preserves positions and AST parity for quoted www URLs', () => {
+    const source = '"www.google.com"';
+    const ast = parseMd(source);
+    const mapped = parseMdWithSourceMap(source);
+    const text = firstNode(ast, 'text');
+    const mappedText = firstNode(mapped.ast, 'text');
+
+    expect(text.value).toBe(source);
+    expect(text.position.start.offset).toBe(0);
+    expect(text.position.end.offset).toBe(source.length);
+    expect(mappedText.value).toBe(source);
+    expect(mapped.sourceMap.getRaw(mappedText)).toBe(source);
+    expect(mappedText.position.start.offset).toBe(0);
+    expect(mappedText.position.end.offset).toBe(source.length);
+    expect(JSON.parse(JSON.stringify(mapped.ast)))
+      .toEqual(JSON.parse(JSON.stringify(ast)));
+  });
+
   test('maps a plain text value', () => {
     const source = 'Hello world';
     const { ast, sourceMap } = parseMdWithSourceMap(source);

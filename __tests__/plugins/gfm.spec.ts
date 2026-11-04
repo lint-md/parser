@@ -79,4 +79,37 @@ describe('remark-gfm plugin', () => {
       }
     }
   });
+
+  test('autolink www-prefixed URL', () => {
+    const root = parseMd('www.example.com');
+    const paragraph = root.children[0];
+    expect(paragraph.type).toBe('paragraph');
+    if (paragraph.type === 'paragraph') {
+      expect(paragraph.children).toHaveLength(1);
+      const link = paragraph.children[0];
+      expect(link.type).toBe('link');
+      if (link.type === 'link') {
+        expect(link.url).toContain('www.example.com');
+        expect(link.position.start.offset).toBe(0);
+        expect(link.position.end.offset).toBe('www.example.com'.length);
+      }
+    }
+  });
+
+  test('quoted www URL remains positioned text', () => {
+    const source = '"www.google.com"';
+    const root = parseMd(source);
+    const paragraph = root.children[0];
+    expect(paragraph.type).toBe('paragraph');
+    if (paragraph.type === 'paragraph') {
+      expect(paragraph.children).toHaveLength(1);
+      const text = paragraph.children[0];
+      expect(text.type).toBe('text');
+      if (text.type === 'text') {
+        expect(text.value).toBe(source);
+        expect(text.position.start.offset).toBe(0);
+        expect(text.position.end.offset).toBe(source.length);
+      }
+    }
+  });
 });
