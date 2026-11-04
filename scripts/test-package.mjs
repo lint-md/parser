@@ -41,6 +41,23 @@ try {
     ),
   );
   assert.deepEqual(Object.keys(installedManifest.dependencies), ['@types/mdast', 'mdast-util-mdx']);
+  assert.equal(installedManifest.license, 'MIT');
+  assert.equal(installedManifest.homepage, 'https://github.com/lint-md/parser#readme');
+  assert.deepEqual(installedManifest.repository, {
+    type: 'git',
+    url: 'git+https://github.com/lint-md/parser.git',
+  });
+  assert.deepEqual(installedManifest.bugs, {
+    url: 'https://github.com/lint-md/parser/issues',
+  });
+  assert.deepEqual(installedManifest.keywords, [
+    'markdown', 'parser', 'remark', 'mdast', 'mdx', 'lint-md',
+  ]);
+  assert.deepEqual(installedManifest.publishConfig, { access: 'public' });
+  assert.match(
+    readFileSync(join(consumerRoot, 'node_modules/@lint-md/parser/LICENSE'), 'utf8'),
+    /^MIT License\r?\n\r?\nCopyright \(c\) 2021 hustcc/,
+  );
 
   const cjsResult = run('node', [
     '-e',
