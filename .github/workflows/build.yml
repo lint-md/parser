@@ -32,7 +32,7 @@ jobs:
         run: git diff --exit-code etc/
 
       - name: Run tests
-        run: pnpm run test
+        run: pnpm run test:built
 
       # Reuses this job's checkout, dependencies, and build. The smoke query
       # is milliseconds with the binary lookup but catches a linear regression.
