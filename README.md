@@ -36,6 +36,24 @@ JSX attribute nodes have no source position in the MDX AST.
 Use the JSX element position to read its full source with `sourceMap.getRaw(element)`.
 Apply fixes only to mapped Markdown fields. Keep ESM, JSX attributes, and expressions unchanged.
 
+### GFM autolink behavior
+
+The parser uses `remark-gfm` to tokenize GFM autolinks.
+It disables the autolink-literal transform after parsing.
+That transform can create nodes without source positions ([remark-gfm issue #16](https://github.com/remarkjs/remark-gfm/issues/16)).
+Markdown AST nodes must keep their source positions for source maps and fixes.
+
+| Input | AST behavior |
+| --- | --- |
+| `www.example.com` | Link |
+| `<https://example.com>` | Link |
+| `<contact@example.com>` | Link |
+| `visit https://example.com` | Text followed by a link |
+| `"www.google.com"` | Text |
+
+The quoted URL remains text because the tokenizer does not recognize it.
+Other URLs that require the disabled transform also remain text.
+
 ### 序列化说明
 
 `revertMdAstNode` 会将 AST 序列化为 Markdown，但 **不保证恢复原始文本**。
