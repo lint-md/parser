@@ -34,6 +34,10 @@ jobs:
       - name: Run tests
         run: pnpm run test:built
 
+      - name: Run source coverage
+        if: matrix.node-version == '22'
+        run: pnpm run test:coverage
+
       # Reuses this job's checkout, dependencies, and build. The smoke query
       # is milliseconds with the binary lookup but catches a linear regression.
       - name: Run source-map benchmark smoke

@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".tmp/jest-source",
+    "module": "ESNext",
+    "declaration": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "__tests__/unit/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage"
+  ]
+}
