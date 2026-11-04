@@ -153,7 +153,7 @@ pnpm run test:mdx3
 
 ### 环境要求
 
-- Node.js >= 20
+- Node.js >= 22
 - pnpm 11（参见 `packageManager` 字段）
 
 ```bash
