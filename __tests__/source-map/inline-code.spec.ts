@@ -1,4 +1,4 @@
-import { SourceMapConsistencyError, parseMdWithSourceMap } from '../helpers';
+import { SourceMapConsistencyError, parseMd, parseMdWithSourceMap } from '../helpers';
 
 /** Collect matching nodes in document order. */
 function nodesOfType(root: any, type: string): any[] {
@@ -11,6 +11,37 @@ function nodesOfType(root: any, type: string): any[] {
 }
 
 describe('parseMdWithSourceMap: inlineCode.value → raw source', () => {
+  test('keeps GFM table behavior for two and three backslashes before a pipe', () => {
+    const two = '`a' + '\\'.repeat(2) + '|b`';
+    const three = '`a' + '\\'.repeat(3) + '|b`';
+    const md = `| value |\n| --- |\n| ${two} |\n| ${three} |\n`;
+    const { ast, sourceMap } = parseMdWithSourceMap(md);
+    expect(ast).toEqual(parseMd(md));
+
+    const table = ast.children[0] as any;
+    const splitRow = table.children[1];
+    expect(splitRow.children).toHaveLength(2);
+    const splitText = splitRow.children[0].children[0];
+    expect(splitText.value).toBe('`a\\');
+    expect(splitRow.children[1].children[0].value).toBe('b`');
+    expect(sourceMap.getRaw(splitText)).toBe(two.slice(0, 4));
+    const splitSlash = sourceMap.getSourceRange(splitText, 2, 3);
+    expect(md.slice(splitSlash.start.offset, splitSlash.end.offset)).toBe('\\'.repeat(2));
+
+    const code = table.children[2].children[0].children[0];
+    expect(code.type).toBe('inlineCode');
+    expect(code.value).toBe('a' + '\\'.repeat(2) + '|b');
+    expect(sourceMap.getRaw(code)).toBe(three);
+    const rawCharacters = Array.from({ length: code.value.length }, (_, index) => {
+      const range = sourceMap.getSourceRange(code, index, index + 1);
+      return md.slice(range.start.offset, range.end.offset);
+    });
+    expect(rawCharacters).toEqual(['a', '\\', '\\', '\\|', 'b']);
+    const pipe = sourceMap.getSourceRange(code, 3, 4);
+    expect(pipe.start.offset).toBe(md.indexOf(three) + 4);
+    expect(pipe.end.offset).toBe(md.indexOf(three) + 6);
+  });
+
   test('maps a basic inline code value and keeps its full raw node source', () => {
     const { ast, sourceMap } = parseMdWithSourceMap('before `value` after');
     const node = nodesOfType(ast, 'inlineCode')[0];
