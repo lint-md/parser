@@ -120,6 +120,60 @@ function sliceLiteralSegments(
   return mappedLength === valueEnd - valueStart ? result : undefined;
 }
 
+// Match mdast-util-gfm-table's codeText exit handler and keep escaped pipes atomic.
+function unescapeTableCode(
+  value: string,
+  segments: MarkdownSourceMapSegment[],
+): { value: string; segments: MarkdownSourceMapSegment[] | undefined } {
+  const parts: string[] = [];
+  const mapped: MarkdownSourceMapSegment[] = [];
+  let sourceIndex = 0;
+  let valueIndex = 0;
+  let complete = true;
+
+  function appendLiteral(end: number): void {
+    parts.push(value.slice(sourceIndex, end));
+    const literal = sliceLiteralSegments(segments, sourceIndex, end);
+    if (!literal)
+      complete = false;
+    else {
+      for (const segment of literal) {
+        mapped.push({
+          ...segment,
+          valueStart: valueIndex + segment.valueStart,
+          valueEnd: valueIndex + segment.valueEnd,
+        });
+      }
+    }
+    valueIndex += end - sourceIndex;
+    sourceIndex = end;
+  }
+
+  for (const match of value.matchAll(/\\([\\|])/g)) {
+    if (match[1] !== '|')
+      continue;
+    appendLiteral(match.index);
+    const escaped = sliceLiteralSegments(segments, sourceIndex, sourceIndex + 2);
+    if (!escaped || escaped.length !== 1)
+      complete = false;
+    else {
+      mapped.push({
+        valueStart: valueIndex,
+        valueEnd: valueIndex + 1,
+        sourceStart: escaped[0].sourceStart,
+        sourceEnd: escaped[0].sourceEnd,
+        kind: 'escape',
+      });
+    }
+    parts.push('|');
+    valueIndex++;
+    sourceIndex += 2;
+  }
+
+  appendLiteral(value.length);
+  return { value: parts.join(''), segments: complete ? mapped : undefined };
+}
+
 function indentationColumns(source: string, start: number, end: number): number {
   let columns = 0;
   for (let offset = start; offset < end; offset++) {
@@ -463,14 +517,23 @@ export function recordingExtension(state: RecordingState) {
   };
 
   const onexitcodetext = function (this: CompileContext, token: any) {
-    const value = this.resume();
+    const rawValue = this.resume();
     const node = this.stack[this.stack.length - 1];
-    node.value = value;
     const segments = inlineCodeSegments;
     const mappedValueLength = inlineCodeValueLength();
     inlineCodeSegments = undefined;
-    if (segments && mappedValueLength === value.length) {
-      state.inlineCodeSegments.set(node, segments);
+    if (this.getData('inTable') && rawValue.includes('\\|')) {
+      const normalized = unescapeTableCode(rawValue, segments || []);
+      node.value = normalized.value;
+      if (mappedValueLength === rawValue.length && normalized.segments) {
+        state.inlineCodeSegments.set(node, normalized.segments);
+      }
+    }
+    else {
+      node.value = rawValue;
+      if (segments && mappedValueLength === rawValue.length) {
+        state.inlineCodeSegments.set(node, segments);
+      }
     }
     this.exit(token);
   };
