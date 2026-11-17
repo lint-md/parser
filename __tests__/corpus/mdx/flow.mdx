@@ -1,0 +1,10 @@
+export const status = { ready: true }
+
+# Flow content
+
+<Panel {...status}>
+  - First item
+  - Second item with **bold** text
+</Panel>
+
+{status.ready && <Badge>Ready</Badge>}
