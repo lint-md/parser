@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.1
+
+### Fixed
+
+- 修复 GFM 表格中的转义管道符导致两个解析入口返回不同 `inlineCode.value` 的问题（#161）。
+- 修复 Unicode 符号导致 emphasis 解析偏离 CommonMark 0.31.2 的问题（#162）。
+
+### Changed
+
+- 补全 npm 包元数据和 MIT 许可证（#154）。
+
+### Tests
+
+- 新增 Markdown 和 MDX Corpus 回归测试（#157）。
+- 新增 CommonMark 0.31.2 规范测试（#160）。
+
 ## 0.5.0
 
 ### Added
