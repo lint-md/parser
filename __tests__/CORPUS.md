@@ -11,8 +11,9 @@ The real documents are copies from the pinned `lint-md/parser` commit in the man
 Run `pnpm run build` before the corpus test. Then run `pnpm exec jest __tests__/corpus.spec.ts --runInBand`.
 `pnpm test` also runs this test.
 
-The test checks AST parity, node positions, raw source, value ranges, and URL ranges.
-It checks fixed examples of entity, escape, emoji, CRLF, and MDX repair offsets.
+The test checks AST parity, exact node positions, raw source, value ranges, and URL ranges.
+It checks fixed offsets for English, Chinese, entity, escape, emoji, CRLF, list, and quote text.
+It checks inline link and definition URLs. It also checks MDX prose repair.
 The expected node types guard against a parser that returns a plausible but wrong tree.
 This test does not compare rendered HTML with the CommonMark or GFM specification.
 
@@ -23,3 +24,4 @@ Add expected node types that describe the feature under test.
 One input still needs parser work. A GFM table cell with `` `a\|b` `` gives different
 `inlineCode.value` results from `parseMd` and `parseMdWithSourceMap`.
 The corpus uses an escaped pipe outside the code span until the two parsers agree.
+Track the fix in [issue #158](https://github.com/lint-md/parser/issues/158).

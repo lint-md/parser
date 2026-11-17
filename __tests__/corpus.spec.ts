@@ -51,16 +51,51 @@ function allNodes(root: Node): Node[] {
   return nodes;
 }
 
-function expectRange(range: Node['position'], source: string): void {
-  expect(range.start.offset).toBeGreaterThanOrEqual(0);
-  expect(range.end.offset).toBeGreaterThanOrEqual(range.start.offset);
-  expect(range.end.offset).toBeLessThanOrEqual(source.length);
-  for (const point of [range.start, range.end]) {
-    expect(point.line).toBeGreaterThanOrEqual(1);
-    expect(point.column).toBeGreaterThanOrEqual(1);
-    expect(point.offset).toBeLessThanOrEqual(source.length);
+function sourcePositions(source: string): (range: Node['position']) => void {
+  const starts = [0];
+  const endings = /\r\n|\r|\n/g;
+  for (let match = endings.exec(source); match; match = endings.exec(source)) {
+    starts.push(match.index + match[0].length);
   }
+
+  function expectedPoint(offset: number): { line: number; column: number; offset: number } {
+    let low = 0;
+    let high = starts.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (starts[middle] <= offset) low = middle;
+      else high = middle - 1;
+    }
+    return { line: low + 1, column: offset - starts[low] + 1, offset };
+  }
+
+  return range => {
+    expect(range.start.offset).toBeGreaterThanOrEqual(0);
+    expect(range.end.offset).toBeGreaterThanOrEqual(range.start.offset);
+    expect(range.end.offset).toBeLessThanOrEqual(source.length);
+    expect(range.start).toEqual(expectedPoint(range.start.offset));
+    expect(range.end).toEqual(expectedPoint(range.end.offset));
+  };
 }
+
+describe('source position oracle', () => {
+  test('counts LF, CRLF, CR, and UTF-16 code units', () => {
+    const source = 'A😀\nB\r\n中\rZ';
+    const check = sourcePositions(source);
+    check({
+      start: { line: 1, column: 2, offset: 1 },
+      end: { line: 1, column: 4, offset: 3 },
+    });
+    check({
+      start: { line: 2, column: 1, offset: 4 },
+      end: { line: 3, column: 1, offset: 7 },
+    });
+    check({
+      start: { line: 3, column: 1, offset: 7 },
+      end: { line: 4, column: 1, offset: 9 },
+    });
+  });
+});
 
 describe('Markdown corpus manifest', () => {
   test('registers every file with a source and license', () => {
@@ -85,6 +120,7 @@ describe('Markdown corpus manifest', () => {
 describe('Markdown corpus regression', () => {
   test.each(manifest.fixtures)('$path', fixture => {
     const source = readFileSync(join(corpusRoot, fixture.path), 'utf8');
+    const expectRange = sourcePositions(source);
     const mdx = fixture.path.endsWith('.mdx');
     const baseline = mdx ? parseMdx(source) : parseMd(source);
     const { ast, sourceMap } = mdx
@@ -98,7 +134,7 @@ describe('Markdown corpus regression', () => {
 
     for (const node of nodes) {
       expect(node.position).toBeDefined();
-      expectRange(node.position, source);
+      expectRange(node.position);
       const raw = sourceMap.getRaw(node);
       if (node.type !== 'text') {
         expect(raw).toBe(source.slice(
@@ -107,6 +143,7 @@ describe('Markdown corpus regression', () => {
         ));
       }
       else {
+        expect(raw.length).toBeGreaterThan(0);
         expect(source.includes(raw)).toBe(true);
       }
 
@@ -118,7 +155,7 @@ describe('Markdown corpus regression', () => {
         let previousEnd = 0;
         for (let index = 0; index < node.value.length; index++) {
           const range = sourceMap.getSourceRange(node, index, index + 1);
-          expectRange(range, source);
+          expectRange(range);
           expect(range.start.offset).toBeGreaterThanOrEqual(previousStart);
           expect(range.end.offset).toBeGreaterThanOrEqual(previousEnd);
           previousStart = range.start.offset;
@@ -127,19 +164,14 @@ describe('Markdown corpus regression', () => {
       }
 
       if (
-        (node.type === 'link' || node.type === 'definition')
+        (node.type === 'definition' || (node.type === 'link' && raw.includes('](')))
         && typeof node.url === 'string'
         && node.url.length > 0
       ) {
-        try {
-          const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
-          expectRange(range, source);
-          expect(range.start.offset).toBeGreaterThanOrEqual(node.position.start.offset);
-          expect(range.end.offset).toBeLessThanOrEqual(node.position.end.offset);
-        }
-        catch (error) {
-          if ((error as Error).name !== 'SourceMapUnavailableError') throw error;
-        }
+        const range = sourceMap.getFieldSourceRange(node, 'url', 0, node.url.length);
+        expectRange(range);
+        expect(range.start.offset).toBeGreaterThanOrEqual(node.position.start.offset);
+        expect(range.end.offset).toBeLessThanOrEqual(node.position.end.offset);
       }
     }
   });
@@ -154,6 +186,7 @@ describe('corpus source offsets and repair', () => {
     const open = text.value!.indexOf('(');
     const close = text.value!.indexOf(')');
     const escaped = text.value!.lastIndexOf('(');
+    expect(sourceMap.getRaw(text)).toBe('中文 &#40;test&#41; and \\(escaped\\).');
 
     const rawAt = (start: number, end: number): string => {
       const range = sourceMap.getSourceRange(text, start, end);
@@ -185,6 +218,47 @@ describe('corpus source offsets and repair', () => {
     const code = allNodes(container.ast as Node).find(node => node.type === 'inlineCode')!;
     const codeRange = container.sourceMap.getSourceRange(code, 0, code.value!.length);
     expect(containerSource.slice(codeRange.start.offset, codeRange.end.offset)).toBe('inline code');
+
+    const referenceSource = readFileSync(join(corpusRoot, 'commonmark/reference-and-html.md'), 'utf8');
+    const reference = parseMdWithSourceMap(referenceSource);
+    const definition = allNodes(reference.ast as Node).find(node => node.type === 'definition')!;
+    const definitionRange = reference.sourceMap.getFieldSourceRange(
+      definition,
+      'url',
+      0,
+      definition.url!.length,
+    );
+    expect(referenceSource.slice(definitionRange.start.offset, definitionRange.end.offset))
+      .toBe('https://example.org/a%20b');
+  });
+
+  test('maps exact text spans in a real README', () => {
+    const source = readFileSync(join(corpusRoot, 'real-world/README.md'), 'utf8');
+    const { ast, sourceMap } = parseMdWithSourceMap(source);
+    const nodes = allNodes(ast as Node);
+    const prose = nodes.find(node => node.type === 'text' && node.value?.startsWith('lint-md 的解析器'))!;
+    expect(sourceMap.getRaw(prose)).toBe('lint-md 的解析器，基于 remark 生态，将 Markdown 字符串转换成 AST。');
+
+    function exactText(node: Node, value: string): number {
+      const index = node.value!.indexOf(value);
+      expect(index).toBeGreaterThanOrEqual(0);
+      const range = sourceMap.getSourceRange(node, index, index + value.length);
+      expect(source.slice(range.start.offset, range.end.offset)).toBe(value);
+      return range.start.offset;
+    }
+
+    expect(exactText(prose, 'lint-md')).toBe(source.indexOf('lint-md 的解析器'));
+    expect(exactText(prose, '解析器')).toBe(source.indexOf('解析器'));
+
+    const listText = nodes.find(node => node.type === 'text' && node.value?.startsWith('合法的 autolink'))!;
+    const listOffset = exactText(listText, '合法的 autolink');
+    expect(listOffset).toBe(source.indexOf('- 合法的 autolink') + 2);
+    expect(source.slice(source.lastIndexOf('\n', listOffset) + 1, listOffset)).toBe('- ');
+
+    const quoteText = nodes.find(node => node.type === 'text' && node.value === '注意')!;
+    const quoteOffset = exactText(quoteText, '注意');
+    expect(quoteOffset).toBe(source.indexOf('> **注意') + 4);
+    expect(source.slice(source.lastIndexOf('\n', quoteOffset) + 1, quoteOffset)).toBe('> **');
   });
 
   test('repairs MDX prose and keeps JSX attributes and structure', () => {
