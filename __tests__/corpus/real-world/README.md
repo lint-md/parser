@@ -1,0 +1,179 @@
+# @lint-md/parser
+
+lint-md 的解析器，基于 remark 生态，将 Markdown 字符串转换成 AST。
+
+单独拆包封装一层的意义是当前 remark 的稳定版本只支持 ESModule，但是 lint-md 主模块依赖了很多 CommonJS 的库，故无法直接迁移到 ESModule。
+
+故将使用 remark 的代码抽离到单独模块，通过 esbuild 同时提供 CommonJS 和 ESModule 产物。
+
+
+## 快速开始
+
+```ts
+import { parseMd } from '@lint-md/parser';
+
+// 将 markdown 转换成 ast
+const ast = parseMd('你的 Markdown 文本');
+```
+
+### MDX input
+
+Use `parseMdx` for MDX files. It keeps ESM, JSX, and JavaScript expressions in separate nodes.
+The MDX entry loads `remark-mdx` when the caller imports `@lint-md/parser/mdx`.
+The default entry supports Markdown without loading the MDX parser.
+
+```ts
+import { parseMdx, parseMdxWithSourceMap } from '@lint-md/parser/mdx';
+
+const input = 'export const x = 1\n\n<Card title="Keep  spaces">Fix  text</Card>';
+const ast = parseMdx(input);
+const { sourceMap } = parseMdxWithSourceMap(input);
+```
+
+The parser maps Markdown `text`, `inlineCode`, `code`, and link URL fields.
+It does not map JSX attribute values or JavaScript expression values.
+JSX attribute nodes have no source position in the MDX AST.
+Use the JSX element position to read its full source with `sourceMap.getRaw(element)`.
+Apply fixes only to mapped Markdown fields. Keep ESM, JSX attributes, and expressions unchanged.
+
+### GFM autolink behavior
+
+The parser uses `remark-gfm` to tokenize GFM autolinks.
+It disables the autolink-literal transform after parsing.
+That transform can create nodes without source positions ([remark-gfm issue #16](https://github.com/remarkjs/remark-gfm/issues/16)).
+Markdown AST nodes must keep their source positions for source maps and fixes.
+
+| Input | AST behavior |
+| --- | --- |
+| `www.example.com` | Link |
+| `<https://example.com>` | Link |
+| `<contact@example.com>` | Link |
+| `visit https://example.com` | Text followed by a link |
+| `"www.google.com"` | Text |
+
+The quoted URL remains text because the tokenizer does not recognize it.
+Other URLs that require the disabled transform also remain text.
+
+### 序列化说明
+
+`revertMdAstNode` 会将 AST 序列化为 Markdown，但 **不保证恢复原始文本**。
+`revertMdAstNode(parseMd(md))` 会对 Markdown 做规范化：
+
+- 合法的 autolink（`www.…`、`http://…`、`foo@example.com`）会被序列化为标准 GFM 格式
+- 波浪线删除线 `~text~` 会规范化为 `~~text~~`
+- 部分特殊字符会被转义（如 `"www.google.com"` 在序列化时变为 `"www\.google.com"`）
+
+如需语义更明确的名字，可使用别名 `stringifyMdAst`，功能与 `revertMdAstNode` 完全相同。
+
+## 位置契约
+
+`parseMd` 返回的 AST 节点**总是**带 `position`，且 `position.start` 与
+`position.end` 的 `line` / `column` / `offset` 字段都是 `number`（而非 `undefined`）。
+这个契约通过 `PositionedMarkdownRoot` / `PositionedMarkdownNode` 在类型层表达，
+因此直接解析和遍历 AST 时不需要额外判空：
+
+```ts
+import { parseMd, type PositionedMarkdownNode } from '@lint-md/parser';
+
+const ast = parseMd('# title');
+ast.position.start.offset; // number
+
+const firstNode: PositionedMarkdownNode = ast.children[0];
+firstNode.position.end.offset; // number
+```
+
+> **注意**：`MarkdownRoot` / `MarkdownNode` 仍透传 mdast 原生类型（即 `position` 可选），
+> 因为外部构造或修改后的 AST 未必带 position。如果需要“必有 position”约束，使用
+> `PositionedMarkdownRoot` / `PositionedMarkdownNode`。
+>
+> 如果要向解析结果插入自行构造的无 position 节点，请先将其类型放宽为 `MarkdownRoot`，
+> 或为新节点补齐 position。
+
+## 源码映射（source map）
+
+`parseMd` 只保证每个节点在原始 Markdown 中的整体范围（`node.position`）。但对于
+`text` 节点，`node.value` 已经过归一化（如 `\(` → `(`、`&amp;` → `&`），而
+`node.position` 仍指向原始文本。要回答“`node.value` 中的某一段对应原文哪一段”，
+请使用 `parseMdWithSourceMap`：
+
+```ts
+import { parseMdWithSourceMap } from '@lint-md/parser';
+
+const { ast, sourceMap } = parseMdWithSourceMap('A&amp;B');
+
+const textNode = ast.children[0].children[0]; // text value "A&B"
+// 把 value 中第 1 个字符（解码后的 '&'）映射回原始 Markdown 的 '&amp;' 区间
+const range = sourceMap.getSourceRange(textNode, 1, 2);
+// range.start.offset === 1, range.end.offset === 6
+
+// 为顺序扫描建立轻量索引。结果是原始 Markdown 的绝对 offset。
+const sourceIndex = sourceMap.getValueSourceIndex(textNode);
+sourceIndex.sourceOffsetAt(1); // 1
+
+// 取回该 text 节点对应的原始 Markdown 子串
+sourceMap.getRaw(textNode); // 'A&amp;B'
+```
+
+### 为什么由 parser 提供
+
+只有 tokenizer / AST 编译器掌握完整上下文，才能正确处理：
+
+- `\(` 是否被解析为转义字符
+- `&amp;` 是否被解析为字符引用，还是（如在 autolink `<https://…?a&amp;b>` 中）保持字面量
+- 数值字符引用被归一化成什么字符，非法码点是否变为替换字符（U+FFFD）
+
+下游若自行重新解析或对齐，会与 parser / 实体库的语义产生漂移。`parseMdWithSourceMap`
+在同一次 micromark → mdast 编译过程中直接记录映射，复用与 `parseMd` 完全相同的
+解码决策路径。
+
+### 契约
+
+- `getSourceRange(node, valueStart, valueEnd)` 的索引与 JavaScript 字符串下标一致，范围均为半开区间 `[start, end)`；当前支持 `text.value`、`inlineCode.value` 与 block `code.value`。`getFieldSourceRange(node, 'url', valueStart, valueEnd)` 当前支持 inline resource link 与 definition 的 destination；autolink 和 GFM autolink literal 暂不包含。
+- `getValueSourceIndex(node).sourceOffsetAt(valueIndex)` 返回原始 Markdown 的绝对 offset。该接口为顺序边界查询保留游标。反向和随机查询使用二分查找。
+- `getCodeSourceInfo(node)` 返回 block `code` 节点的源码结构。fenced code 返回 `{ kind: 'fenced', openingFence, infoInsertPoint }`，indented code 返回 `{ kind: 'indented' }`。`openingFence` 是围栏序列（反引号或波浪线）的范围；`infoInsertPoint` 是 opening fence 行末、行结束符之前的位置。当 `node.lang` 缺失时，在该 offset 插入 info string 即可补上语言；该位置不会落在 CRLF 的行结束符中间。parser 在解析阶段记录这些位置，不重新扫描 Markdown。
+- 映射覆盖受支持节点的整个 `value`，segment 之间无空洞、无重叠。
+- 当 value 对应的原始源码连续时，`getSourceRange(node, 0, node.value.length)` 覆盖该节点 value 的完整原始来源范围。当 blockquote marker、list indentation 等容器语法将来源分隔开时，单个连续的 `ParsedPosition` 无法准确表达该范围，`getSourceRange()` 会抛出 `RangeError`。
+- 错误分为三条路径，专属错误均继承 `RangeError`（现有 `catch (RangeError)` 不受影响），并带稳定的 `code` 字段；当跨边界传递时（如跨 CJS/ESM 实例、重复安装、worker 边界），只要错误被显式序列化且 `code` 字段被保留，即可用 `code` 而非 `instanceof` 判断（类本身无法保证任意序列化机制一定保留自定义属性）：
+  - `SourceMapConsistencyError`（`ERR_SOURCE_MAP_CONSISTENCY`）：已建立映射的 `text`、`inlineCode`、`code` 节点的 `value`，或 `link`、`definition` 节点的 `url` 在解析后被修改——映射只对原始解析字段有效，重新赋入相同内容不受影响；
+  - `SourceMapUnavailableError`（`ERR_SOURCE_MAP_UNAVAILABLE`）：节点属于其他文档、由插件生成或在解析后加入、或不是受支持的节点或字段——不会伪造位置；
+  - 普通 `RangeError`：`valueStart` / `valueEnd` 非法（非有限整数、越界、倒置）、范围跨越非连续的源码片段，或空区间落在原子构造内部。
+- 当前版本覆盖 `text.value`、`inlineCode.value`、`code.value`、inline resource link 的 `url` 与 definition 的 `url`；其余字段后续版本补充。
+
+## 开发验证
+
+```bash
+pnpm run build
+pnpm run test:package
+pnpm run test:mdx3
+```
+
+`test:package` 会打包并安装实际 tarball，然后验证 CommonJS、ESModule 和 TypeScript 类型入口。
+
+## 维护说明
+
+### 环境要求
+
+- Node.js >= 22
+- pnpm 11（参见 `packageManager` 字段）
+
+```bash
+pnpm install --frozen-lockfile   # 首次安装使用锁文件
+```
+
+### 公开 API 管理
+
+本项目使用 [API Extractor](https://api-extractor.com/) 管理公开 API。
+
+- 所有公开导出必须添加 `/** @public */` 标签
+- JSDoc 注释须遵循 TSDoc 格式：参数写 `@param name - 说明`（不写类型），返回值写 `@returns 说明`
+- 修改公开 API 后运行 `pnpm run build`，API Extractor 会自动更新 `etc/parser.api.md`
+- 将更新后的 API report 文件一并提交
+
+### CI 检查
+
+- `etc/parser.api.md` 过期会导致 CI 构建失败
+- API Extractor 报告的 compiler / extractor / TSDoc warning 均视为错误
+
+## License
+
+MIT

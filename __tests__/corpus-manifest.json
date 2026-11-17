@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "fixtures": [
+    {
+      "path": "commonmark/containers.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://spec.commonmark.org/0.31.2/#container-blocks-and-leaf-blocks",
+      "license": "MIT",
+      "tags": ["list", "blockquote", "code", "link"],
+      "expectedNodes": ["list", "blockquote", "code", "link", "inlineCode"]
+    },
+    {
+      "path": "commonmark/crlf-unicode.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://spec.commonmark.org/0.31.2/#characters-and-lines",
+      "license": "MIT",
+      "tags": ["crlf", "unicode", "entity", "escape"],
+      "expectedNodes": ["heading", "list", "text"]
+    },
+    {
+      "path": "commonmark/inline-source.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://spec.commonmark.org/0.31.2/#inlines",
+      "license": "MIT",
+      "tags": ["unicode", "entity", "escape", "link", "inlineCode"],
+      "expectedNodes": ["strong", "emphasis", "link", "image", "break"]
+    },
+    {
+      "path": "commonmark/reference-and-html.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://spec.commonmark.org/0.31.2/#link-reference-definitions",
+      "license": "MIT",
+      "tags": ["definition", "html", "code"],
+      "expectedNodes": ["definition", "linkReference", "html", "code", "thematicBreak"]
+    },
+    {
+      "path": "extensions/frontmatter-directive.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://github.com/remarkjs/remark-directive",
+      "license": "MIT",
+      "tags": ["frontmatter", "directive", "list"],
+      "expectedNodes": ["yaml", "containerDirective", "textDirective", "list"]
+    },
+    {
+      "path": "extensions/math-and-code.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://github.com/remarkjs/remark-math",
+      "license": "MIT",
+      "tags": ["math", "code", "unicode"],
+      "expectedNodes": ["inlineMath", "math", "code", "inlineCode"]
+    },
+    {
+      "path": "gfm/escaped-table.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://github.github.com/gfm/#tables-extension-",
+      "license": "MIT",
+      "tags": ["table", "escape", "entity", "strikethrough"],
+      "expectedNodes": ["table", "delete", "link", "inlineCode"]
+    },
+    {
+      "path": "gfm/table-and-tasks.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://github.github.com/gfm/#task-list-items-extension-",
+      "license": "MIT",
+      "tags": ["table", "task", "html", "autolink"],
+      "expectedNodes": ["table", "listItem", "delete", "link", "html"]
+    },
+    {
+      "path": "malformed/unclosed-fence.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://spec.commonmark.org/0.31.2/#fenced-code-blocks",
+      "license": "MIT",
+      "tags": ["incomplete", "code"],
+      "expectedNodes": ["heading", "paragraph", "code"]
+    },
+    {
+      "path": "malformed/unclosed-inline.md",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://spec.commonmark.org/0.31.2/#links",
+      "license": "MIT",
+      "tags": ["incomplete", "link", "escape"],
+      "expectedNodes": ["heading", "paragraph", "text"]
+    },
+    {
+      "path": "mdx/component.mdx",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://mdxjs.com/docs/what-is-mdx/",
+      "license": "MIT",
+      "tags": ["mdx", "jsx", "esm", "link"],
+      "expectedNodes": ["mdxjsEsm", "mdxJsxFlowElement", "mdxTextExpression", "link"]
+    },
+    {
+      "path": "mdx/flow.mdx",
+      "kind": "syntax",
+      "origin": "Original test document",
+      "source": "https://mdxjs.com/docs/what-is-mdx/",
+      "license": "MIT",
+      "tags": ["mdx", "jsx", "esm", "list"],
+      "expectedNodes": ["mdxjsEsm", "mdxJsxFlowElement", "mdxFlowExpression", "list"]
+    },
+    {
+      "path": "real-world/CHANGELOG.md",
+      "kind": "real-world",
+      "origin": "lint-md/parser CHANGELOG.md",
+      "source": "https://github.com/lint-md/parser/blob/bc59c11d1d5926e089b681ccb2a2c22ffa64cbcc/CHANGELOG.md",
+      "license": "MIT",
+      "tags": ["release-notes", "links", "lists"],
+      "expectedNodes": ["heading", "list", "inlineCode"]
+    },
+    {
+      "path": "real-world/CONTRIBUTING.md",
+      "kind": "real-world",
+      "origin": "lint-md/parser CONTRIBUTING.md",
+      "source": "https://github.com/lint-md/parser/blob/bc59c11d1d5926e089b681ccb2a2c22ffa64cbcc/CONTRIBUTING.md",
+      "license": "MIT",
+      "tags": ["contribution", "code", "lists"],
+      "expectedNodes": ["heading", "list", "code"]
+    },
+    {
+      "path": "real-world/README.md",
+      "kind": "real-world",
+      "origin": "lint-md/parser README.md",
+      "source": "https://github.com/lint-md/parser/blob/bc59c11d1d5926e089b681ccb2a2c22ffa64cbcc/README.md",
+      "license": "MIT",
+      "tags": ["readme", "code", "links"],
+      "expectedNodes": ["heading", "link", "code"]
+    }
+  ]
+}
