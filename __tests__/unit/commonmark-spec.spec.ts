@@ -48,9 +48,15 @@ const knownDifferences: Record<number, { reason: string; currentHtml: string }> 
   },
 };
 
-const blockContainers = new Set([
-  'root', 'blockquote', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr',
+const blockElements = new Set([
+  'address', 'article', 'aside', 'blockquote', 'div', 'dl', 'dt', 'dd', 'h1', 'h2',
+  'h3', 'h4', 'h5', 'h6', 'hr', 'li', 'ol', 'p', 'pre', 'section', 'table', 'tbody',
+  'td', 'th', 'thead', 'tr', 'ul',
 ]);
+
+function isBlockElement(node: any): boolean {
+  return node?.type === 'element' && blockElements.has(node.tagName);
+}
 
 function canonicalHtml(html: string): unknown {
   const tree = fromHtml(html.replace(/\n$/, ''), { fragment: true });
@@ -60,12 +66,12 @@ function canonicalHtml(html: string): unknown {
       return { type: node.type, value: node.value };
     }
 
-    const name = node.tagName || 'root';
     const children = (node.children || [])
-      .filter((child: any) => !(
-        blockContainers.has(name)
-        && child.type === 'text'
+      .filter((child: any, index: number, siblings: any[]) => !(
+        child.type === 'text'
         && /^\s*$/.test(child.value)
+        && isBlockElement(siblings[index - 1])
+        && isBlockElement(siblings[index + 1])
       ))
       .map(visit);
 
@@ -101,6 +107,12 @@ describe('CommonMark 0.31.2 specification', () => {
     expect(canonicalHtml('<p>A</p>')).not.toEqual(canonicalHtml('<h1>A</h1>'));
     expect(canonicalHtml('<pre><code>A\n</code></pre>'))
       .not.toEqual(canonicalHtml('<pre><code>A</code></pre>'));
+    expect(canonicalHtml('<li><em>a</em> <em>b</em></li>'))
+      .not.toEqual(canonicalHtml('<li><em>a</em><em>b</em></li>'));
+    expect(canonicalHtml('<blockquote><em>a</em> <em>b</em></blockquote>'))
+      .not.toEqual(canonicalHtml('<blockquote><em>a</em><em>b</em></blockquote>'));
+    expect(canonicalHtml('<li><p>a</p>\n<p>b</p></li>'))
+      .toEqual(canonicalHtml('<li><p>a</p><p>b</p></li>'));
   });
 
   test('loads the pinned official examples', () => {
