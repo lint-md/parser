@@ -16,6 +16,7 @@ It checks fixed offsets for English, Chinese, entity, escape, emoji, CRLF, list,
 It checks inline link and definition URLs. It also checks MDX prose repair.
 The expected node types guard against a parser that returns a plausible but wrong tree.
 This test does not compare rendered HTML with the CommonMark or GFM specification.
+The separate [CommonMark specification test](COMMONMARK_SPEC.md) checks expected HTML.
 
 Add each new `.md` or `.mdx` file to the manifest. Keep the manifest paths sorted.
 Use a pinned source URL for copied documents. Check the license before you copy a file.
