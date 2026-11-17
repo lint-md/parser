@@ -1,6 +1,25 @@
 import { parseMd, parseMdWithSourceMap } from '../helpers';
 
 describe('parseMd vs parseMdWithSourceMap: AST parity corpus', () => {
+  test.each(['*$*alpha.', '*£*bravo.', '*€*charlie.', 'foo*bar*'])(
+    'classifies Unicode symbols and keeps AST parity: %p',
+    md => {
+      const plain = parseMd(md);
+      const mapped = parseMdWithSourceMap(md);
+      expect(mapped.ast).toEqual(plain);
+
+      const children = (plain.children[0] as any).children;
+      if (md === 'foo*bar*') {
+        expect(children.map((node: any) => node.type)).toEqual(['text', 'emphasis']);
+        expect(children[1].children[0].value).toBe('bar');
+      }
+      else {
+        expect(children.map((node: any) => [node.type, node.value]))
+          .toEqual([['text', md]]);
+      }
+    },
+  );
+
   // A varied corpus exercising tokenizers / mdast decisions that the recording
   // extension must not disturb: entities, escapes, autolinks, GFM (tables,
   // strikethrough, task lists), directives, math, frontmatter, and mixed

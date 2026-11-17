@@ -22,10 +22,6 @@ const knownDifferences: Record<number, { reason: string; currentHtml: string }> 
     reason: 'frontmatter treats both thematic breaks as YAML',
     currentHtml: '',
   },
-  354: {
-    reason: 'the parser accepts Unicode punctuation near emphasis',
-    currentHtml: '<p>*$*alpha.</p>\n<p><em>£</em>bravo.</p>\n<p><em>€</em>charlie.</p>',
-  },
   602: {
     reason: 'GFM links a URL inside invalid angle brackets',
     currentHtml: '<p>&#x3C;<a href="https://foo.bar/baz">https://foo.bar/baz</a> bim></p>',

@@ -10,12 +10,12 @@ The comparison parses both HTML strings as fragments.
 It ignores entity spelling, void tag spelling, one final newline, and space between block elements.
 It keeps text inside paragraphs and code blocks unchanged.
 
-The test checks 644 examples against the official result.
-Eight examples have recorded differences. Each case must match its current result and differ from the official result.
+The test checks 645 examples against the official result.
+Seven examples have recorded differences. Each case must match its current result and differ from the official result.
 Two cases use `---` as frontmatter. Four cases use GFM autolinks.
-One case creates a directive. One case parses Unicode emphasis differently.
+One case creates a directive.
 See `knownDifferences` in the test for their example numbers.
-[Issue #159](https://github.com/lint-md/parser/issues/159) tracks the Unicode emphasis case.
+Example 354 matches the official result with the pinned Unicode character classifier.
 
 The `commonmark-spec` package uses the [CC BY-SA 4.0 license](https://github.com/commonmark/commonmark-spec/blob/0.31.2/LICENSE).
 This repository does not copy the specification data into its source tree.
