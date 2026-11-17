@@ -178,6 +178,26 @@ describe('Markdown corpus regression', () => {
 });
 
 describe('corpus source offsets and repair', () => {
+  test('maps an escaped pipe in a GFM table code span', () => {
+    const source = readFileSync(join(corpusRoot, 'gfm/escaped-table.md'), 'utf8');
+    const { ast, sourceMap } = parseMdWithSourceMap(source);
+    const code = allNodes(ast as Node).find(node => node.type === 'inlineCode' && node.value?.includes('|'))!;
+    expect(code.value).toBe('a|b');
+    expect(sourceMap.getRaw(code)).toBe('`a\\|b`');
+
+    const rawAt = (start: number, end: number): string => {
+      const range = sourceMap.getSourceRange(code, start, end);
+      return source.slice(range.start.offset, range.end.offset);
+    };
+    expect(rawAt(0, 1)).toBe('a');
+    expect(rawAt(1, 2)).toBe('\\|');
+    expect(rawAt(2, 3)).toBe('b');
+    const codeStart = source.indexOf('`a\\|b`');
+    const pipe = sourceMap.getSourceRange(code, 1, 2);
+    expect(pipe.start.offset).toBe(codeStart + 2);
+    expect(pipe.end.offset).toBe(codeStart + 4);
+  });
+
   test('maps entities, escapes, emoji, and CRLF in UTF-16 offsets', () => {
     const source = readFileSync(join(corpusRoot, 'commonmark/crlf-unicode.md'), 'utf8');
     const { ast, sourceMap } = parseMdWithSourceMap(source);
